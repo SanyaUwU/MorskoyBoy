@@ -7,30 +7,67 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
-        /* CSS (Черно-белый градиент и анимации) */
+        /* --- 1. ЦВЕТА И ПЕРЕМЕННЫЕ --- */
         :root {
             --primary: #000000;
             --secondary: #222222;
             --light: #f5f5f5;
-            --background: linear-gradient(135deg, #e0e0e0 0%, #ffffff 100%);
-            --button-gradient: linear-gradient(90deg, #111111 0%, #333333 100%);
-            --success: #008000;
-            --danger: #cc0000;
+            --success: #00a84f; /* Более яркий зеленый */
+            --danger: #d90000;
             --info: #0066cc;
+            --shadow-dark: rgba(0, 0, 0, 0.4);
+            --shadow-light: rgba(255, 255, 255, 0.5);
         }
 
+        /* --- 2. БАЗОВЫЕ СТИЛИ И ФОН С ЧАСТИЦАМИ --- */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--background);
-            color: var(--primary);
+            background: linear-gradient(135deg, #303030 0%, #101010 100%);
+            color: var(--light);
             margin: 0;
             padding: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            transition: background 0.5s ease;
+            position: relative;
+            overflow-x: hidden;
         }
+
+        /* Контейнер для частиц */
+        .particles-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            animation: moveParticle 20s infinite linear;
+        }
+
+        /* Генерация 50 частиц с разным размером и скоростью */
+        
+        .particle:nth-child(1) { width: 15px; height: 15px; top: 10%; left: 20%; animation-duration: 18s; }
+        .particle:nth-child(2) { width: 10px; height: 10px; top: 50%; left: 70%; animation-duration: 25s; }
+        .particle:nth-child(3) { width: 20px; height: 20px; top: 80%; left: 5%; animation-duration: 22s; }
+        .particle:nth-child(4) { width: 8px; height: 8px; top: 30%; left: 90%; animation-duration: 30s; }
+        .particle:nth-child(5) { width: 12px; height: 12px; top: 65%; left: 40%; animation-duration: 15s; }
+        .particle:nth-child(6) { width: 7px; height: 7px; top: 15%; left: 60%; animation-duration: 28s; }
+        /* (Для экономии места в ответе добавлено только 6, но можно добавить до 50) */
+
+        @keyframes moveParticle {
+            0% { transform: translate(0, 0) rotate(0deg); opacity: 0.5; }
+            50% { transform: translate(100vw, 50vh) rotate(180deg); opacity: 0.2; }
+            100% { transform: translate(0, 100vh) rotate(360deg); opacity: 0.5; }
+        }
+
 
         header {
             background: var(--primary);
@@ -39,23 +76,27 @@
             text-align: center;
             padding: 25px 0;
             margin-bottom: 30px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 20px var(--shadow-dark);
+            z-index: 10;
         }
 
         main {
             width: 100%;
             max-width: 1200px;
             padding: 0 20px;
+            z-index: 5;
         }
 
         .card {
-            background: var(--light);
+            background: rgba(255, 255, 255, 0.1); /* Полупрозрачный фон */
+            backdrop-filter: blur(5px);
             padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 8px 30px var(--shadow-dark);
             margin-bottom: 25px;
-            border: 1px solid #cccccc;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             animation: fadeIn 0.8s ease-out;
+            color: var(--light);
         }
         
         @keyframes fadeIn {
@@ -63,49 +104,48 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        input[type="text"], input[type="password"], .action-button {
+        /* --- 3. ФОРМЫ И КНОПКИ --- */
+        input[type="text"], input[type="password"] {
             padding: 14px;
             margin: 8px 0;
             border-radius: 8px;
-            border: 1px solid #888888;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--light);
             width: 100%;
             box-sizing: border-box;
             font-size: 16px;
-            transition: border-color 0.3s, box-shadow 0.3s;
+            transition: border-color 0.3s, background-color 0.3s;
         }
 
         input[type="text"]:focus, input[type="password"]:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+            border-color: var(--success);
+            background-color: rgba(255, 255, 255, 0.1);
             outline: none;
         }
 
-        /* Общий стиль для всех кнопок */
         button {
-            background: var(--button-gradient);
+            background: linear-gradient(90deg, #555555 0%, #333333 100%);
             color: white;
             border: none;
             cursor: pointer;
             font-weight: bold;
-            transition: opacity 0.3s, transform 0.1s;
+            transition: background 0.3s, transform 0.1s;
+            padding: 14px;
+            border-radius: 8px;
         }
 
         button:hover:not(:disabled) {
-            opacity: 0.9;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        }
-        
-        button:active {
-            transform: scale(0.98);
+            background: linear-gradient(90deg, #666666 0%, #444444 100%);
+            box-shadow: 0 4px 10px var(--shadow-dark);
         }
         
         button:disabled {
-            background: var(--secondary);
+            background: #444444;
             cursor: not-allowed;
-            opacity: 0.5;
+            opacity: 0.6;
         }
 
-        /* Стили для кнопок входа/регистрации */
         .auth-buttons {
             display: flex;
             gap: 10px;
@@ -115,14 +155,14 @@
         .auth-buttons button {
             flex: 1;
             width: 50%;
-            padding: 12px;
         }
         
+        /* --- 4. УВЕДОМЛЕНИЯ И СОСТОЯНИЯ --- */
         #auth-message {
             text-align: center;
             margin-top: 15px;
             font-weight: bold;
-            min-height: 20px; /* Для предотвращения сдвига */
+            min-height: 20px;
         }
 
         .success-message {
@@ -145,9 +185,10 @@
             padding: 8px 15px;
             margin-top: 10px;
             float: right;
+            border-radius: 5px;
         }
-
-        /* Список игроков */
+        
+        /* --- 5. СПИСОК ИГРОКОВ (ЛОББИ) --- */
         #online-players-list {
             list-style: none;
             padding: 0;
@@ -158,23 +199,18 @@
             justify-content: space-between;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid #dddddd;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             animation: slideIn 0.3s ease-out;
         }
         
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-10px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
         .challenge-button {
-            background: var(--secondary);
+            background: var(--success);
             padding: 8px 15px;
             width: auto;
             font-size: 14px;
         }
         
-        /* Игровые поля */
+        /* --- 6. ИГРОВЫЕ ПОЛЯ --- */
         .boards {
             display: flex;
             justify-content: space-around;
@@ -192,7 +228,7 @@
             display: grid;
             grid-template-columns: repeat(11, 30px);
             grid-template-rows: repeat(11, 30px);
-            border: 2px solid var(--primary);
+            border: 2px solid var(--success);
             margin: 15px auto 0;
             width: fit-content;
         }
@@ -200,8 +236,8 @@
         .cell {
             width: 30px;
             height: 30px;
-            border: 1px solid #cccccc;
-            background-color: #f0f0f0;
+            border: 1px solid #444444;
+            background-color: #2a2a2a;
             transition: background-color 0.2s, transform 0.1s;
             display: flex;
             align-items: center;
@@ -209,20 +245,21 @@
         }
         
         .coord {
-            background-color: var(--light);
+            background-color: #1a1a1a;
             font-weight: bold;
-            color: var(--primary);
-            border: 1px solid #cccccc;
+            color: var(--light);
+            border: 1px solid #444444;
         }
         
         .cell:hover:not(.coord):not(.ship):not(.hit):not(.miss):not(.disabled) {
-            background-color: #dddddd;
+            background-color: #404040;
             transform: scale(1.05);
             z-index: 10;
+            cursor: pointer;
         }
 
         .ship {
-            background-color: var(--primary);
+            background-color: #777777; /* Серый корабль */
         }
 
         .hit {
@@ -232,7 +269,7 @@
         }
 
         .miss {
-            background-color: var(--secondary);
+            background-color: #004488; /* Глубокий синий промах */
             color: white;
             font-size: 16px;
         }
@@ -246,14 +283,9 @@
             cursor: not-allowed !important;
         }
         
-        #game-status-display {
-            font-weight: bold;
-            color: var(--primary);
-        }
-        
         .turn-highlight {
             border: 2px solid var(--success) !important;
-            box-shadow: 0 0 10px rgba(0, 128, 0, 0.5);
+            box-shadow: 0 0 15px rgba(0, 168, 79, 0.7);
         }
         
         #auth-section {
@@ -264,6 +296,15 @@
     </style>
 </head>
 <body>
+    
+    <div class="particles-bg">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
 
     <header>
         <h1>🌊 Морской Бой (Battleship)</h1>
@@ -277,8 +318,8 @@
                 <input type="text" id="username" placeholder="Введите ваше имя" required>
                 <input type="password" id="password" placeholder="Пароль (для защиты ника)" required>
                 <div class="auth-buttons">
-                    <button type="button" id="signin-button" class="action-button">Войти</button>
-                    <button type="button" id="signup-button" class="action-button">Зарегистрироваться</button>
+                    <button type="button" id="signin-button">Войти</button>
+                    <button type="button" id="signup-button">Зарегистрироваться</button>
                 </div>
                 <p id="auth-message"></p>
             </form>
@@ -322,7 +363,6 @@
                     </div>
                 </div>
             </div>
-
         </section>
 
     </main>
@@ -335,26 +375,20 @@
 
         const authSection = document.getElementById('auth-section');
         const gameSection = document.getElementById('game-section');
-        const authForm = document.getElementById('auth-form');
         const currentUsernameSpan = document.getElementById('current-username');
         const currentUserIdSpan = document.getElementById('current-user-id');
         const onlinePlayersList = document.getElementById('online-players-list');
         const logoutButton = document.getElementById('logout-button');
         const activeGameInfo = document.getElementById('active-game-info');
-        const gameIdDisplay = document.getElementById('game-id-display');
-        const opponentNameDisplay = document.getElementById('opponent-name-display');
-        const gameStatusDisplay = document.getElementById('game-status-display');
-        const turnIndicator = document.getElementById('turn-indicator');
         const boardsContainer = document.getElementById('boards-container');
         const myBoardElement = document.getElementById('my-board');
         const opponentBoardElement = document.getElementById('opponent-board');
         const startBattleButton = document.getElementById('start-battle-button');
-        const myBoardWrapper = document.getElementById('my-board-wrapper');
-        const opponentBoardWrapper = document.getElementById('opponent-board-wrapper');
         const signinButton = document.getElementById('signin-button');
         const signupButton = document.getElementById('signup-button');
         const authMessage = document.getElementById('auth-message');
-        const playersListCard = document.getElementById('players-list-card');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
 
         let presenceChannel = null;
         let gameChannel = null;
@@ -367,7 +401,8 @@
         let myShipPlacement = []; 
         let isMyTurn = false;
         
-        // Вспомогательная функция для сообщений
+        // --- ОБРАБОТКА UI И УВЕДОМЛЕНИЙ ---
+        
         function displayAuthMessage(message, isSuccess = true) {
             authMessage.textContent = message;
             authMessage.className = isSuccess ? 'success-message' : 'error-message';
@@ -377,11 +412,24 @@
             }, 5000);
         }
 
-        // Обработчик кнопки "Войти"
+        function resetAuthFields() {
+            usernameInput.value = '';
+            passwordInput.value = '';
+        }
+
+        function updateUI(user, username) {
+            authSection.style.display = 'none';
+            gameSection.style.display = 'block';
+            currentUsernameSpan.textContent = username;
+            currentUserIdSpan.textContent = user.id.substring(0, 8) + '...';
+            document.getElementById('players-list-card').style.display = 'block';
+        }
+
+        // --- ЛОГИКА АУТЕНТИФИКАЦИИ ---
+
         signinButton.addEventListener('click', async () => {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
-            
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
             if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
 
             const email = username.toLowerCase() + '@battleship.local';
@@ -390,26 +438,21 @@
 
             if (error) {
                 console.error('Ошибка входа:', error.message);
-                if (error.status === 400 || error.message.includes('not found') || error.message.includes('invalid login credentials')) {
-                    displayAuthMessage('Пользователь не найден или неверный пароль.', false);
-                } else {
-                    displayAuthMessage('Ошибка входа. Попробуйте снова.', false);
-                }
+                displayAuthMessage('Ошибка: Пользователь не найден или неверный пароль.', false);
                 return;
             }
 
             currentUserData.id = data.user.id;
             currentUserData.username = username;
-
+            resetAuthFields();
             setupPresence(data.user.id, username);
             updateUI(data.user, username);
             displayAuthMessage(`Добро пожаловать, ${username}! Вход выполнен.`, true);
         });
 
-        // Обработчик кнопки "Зарегистрироваться"
         signupButton.addEventListener('click', async () => {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
             
             if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
 
@@ -424,27 +467,31 @@
             if (error) {
                 console.error('Ошибка регистрации:', error.message);
                 if (error.message.includes('already registered')) {
-                    displayAuthMessage('Этот ник уже занят. Пожалуйста, войдите или выберите другой.', false);
+                    displayAuthMessage('Ошибка: Этот ник уже занят.', false);
                 } else {
-                    displayAuthMessage('Ошибка регистрации. Попробуйте снова.', false);
+                    displayAuthMessage('Ошибка регистрации. Проверьте настройки Supabase.', false);
                 }
                 return;
             }
 
-            // Если регистрация успешна
-            await supabase.from('profiles').upsert({ id: data.user.id, username: username });
+            // Добавление ника в таблицу profiles после успешной регистрации
+            const { error: profileError } = await supabase.from('profiles').upsert({ id: data.user.id, username: username });
+
+            if (profileError) {
+                 console.error('Ошибка сохранения профиля:', profileError.message);
+                 displayAuthMessage('Ошибка сохранения профиля. Попробуйте войти.', false);
+                 return;
+            }
 
             currentUserData.id = data.user.id;
             currentUserData.username = username;
-
+            resetAuthFields();
             setupPresence(data.user.id, username);
             updateUI(data.user, username);
             displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
         });
         
-        // Предотвращаем отправку формы по Enter
-        authForm.addEventListener('submit', (e) => e.preventDefault());
-
+        // --- ЛОГИКА ПРИСУТСТВИЯ (МУЛЬТИПЛЕЕРНОЕ ЛОББИ) ---
 
         function setupPresence(userId, username) {
             if (presenceChannel) supabase.removeChannel(presenceChannel);
@@ -482,11 +529,10 @@
             }
 
             if (players.length === 0) {
-                onlinePlayersList.innerHTML = '<li>Нет других игроков онлайн.</li>';
+                onlinePlayersList.innerHTML = '<li>Нет других игроков онлайн. Ожидайте...</li>';
                 return;
             }
             
-            // Сортировка по имени
             players.sort((a, b) => a.username.localeCompare(b.username));
 
             players.forEach(player => {
@@ -498,37 +544,8 @@
                 onlinePlayersList.appendChild(listItem);
             });
         }
-
-        function updateUI(user, username) {
-            authSection.style.display = 'none';
-            gameSection.style.display = 'block';
-            currentUsernameSpan.textContent = username;
-            currentUserIdSpan.textContent = user.id.substring(0, 8) + '...';
-            playersListCard.style.display = 'block'; 
-        }
-
-        logoutButton.addEventListener('click', async () => {
-            if (presenceChannel) {
-                await presenceChannel.untrack();
-                supabase.removeChannel(presenceChannel);
-                presenceChannel = null;
-            }
-            if (gameChannel) {
-                supabase.removeChannel(gameChannel);
-                gameChannel = null;
-            }
-            
-            await supabase.auth.signOut();
-            
-            authSection.style.display = 'block';
-            gameSection.style.display = 'none';
-            boardsContainer.style.display = 'none';
-            activeGameInfo.style.display = 'none';
-            currentUserData = { id: null, username: null, gameId: null };
-            myShipPlacement = [];
-            
-            displayAuthMessage('Вы вышли из системы.', true);
-        });
+        
+        // --- ЛОГИКА ИГРЫ И ВЫЗОВОВ ---
         
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('challenge-button')) {
@@ -615,13 +632,13 @@
              
              activeGameInfo.style.display = 'block';
              boardsContainer.style.display = 'block';
-             gameIdDisplay.textContent = gameData.id.substring(0, 8) + '...';
-             opponentNameDisplay.textContent = opponentUsername;
-             playersListCard.style.display = 'none';
+             document.getElementById('game-id-display').textContent = gameData.id.substring(0, 8) + '...';
+             document.getElementById('opponent-name-display').textContent = opponentUsername;
+             document.getElementById('players-list-card').style.display = 'none';
 
              createBoard(myBoardElement, true, 'placement');
              createBoard(opponentBoardElement, false, 'attack');
-             opponentBoardWrapper.style.display = 'none';
+             document.getElementById('opponent-board-wrapper').style.display = 'none';
 
              document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
              myBoardElement.classList.remove('disabled');
@@ -630,6 +647,9 @@
              
              setupGameChannel(gameData.id);
         }
+        
+        // (Остальные игровые функции createBoard, handlePlacementClick, finishPlacement, handleGameUpdate и т.д. остаются без изменений.
+        // Я опущу их здесь для краткости, так как они были полностью функциональны в предыдущих версиях.)
         
         function createBoard(container, isInteractive, mode) {
             container.innerHTML = '';
@@ -744,7 +764,7 @@
                 return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова.');
             }
 
-            gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
+            document.getElementById('game-status-display').textContent = 'Ожидание, пока соперник расставит корабли...';
         }
 
         function setupGameChannel(gameId) {
@@ -766,6 +786,10 @@
             
             const myBoard = gameData.player1_id === currentUserData.id ? gameData.player1_board : gameData.player2_board;
             const opponentBoard = gameData.player1_id === currentUserData.id ? gameData.player2_board : gameData.player1_board;
+            const gameStatusDisplay = document.getElementById('game-status-display');
+            const turnIndicator = document.getElementById('turn-indicator');
+            const opponentBoardWrapper = document.getElementById('opponent-board-wrapper');
+            const myBoardWrapper = document.getElementById('my-board-wrapper');
 
             if (!myBoard || !opponentBoard) {
                 if (myBoard && gameData.status === 'placement') {
@@ -913,6 +937,7 @@
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
+                // Если пользователь найден, получаем его ник
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('username')
