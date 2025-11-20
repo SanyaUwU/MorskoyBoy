@@ -6,7 +6,7 @@
     <title>🌊 Морской Бой - Мультиплеер</title>
     
     <style>
-        /* --- CSS Стили (Оставлены без изменений) --- */
+        /* ... Ваш CSS код ... */
         :root {
             --primary: #000000;
             --secondary: #222222;
@@ -361,38 +361,33 @@
     </main>
     
     <script type="module">
-        // 1. ИМПОРТ ИНСТРУМЕНТА СОЗДАНИЯ КЛИЕНТА НАПРЯМУЮ ИЗ МОДУЛЯ
+        // 1. ИМПОРТ ИНСТРУМЕНТА СОЗДАНИЯ КЛИЕНТА
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
         
         // ИНФОРМАЦИЯ О SUPABASE
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
+        // ВАШ РАБОЧИЙ ANON KEY
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlFPNITh7091kyxFFh8LL7ZAY';
         
         let supabase = null;
         const authMessage = document.getElementById('auth-message');
         
-        // Логика запуска игры в модуле выполняется сразу, когда импорт доступен
-        if (typeof createClient !== 'undefined') {
-            authMessage.textContent = 'Библиотека Supabase загружена через модуль. Инициализация игры...';
-            startMorskoyBoy(createClient);
-        } else {
-            // Если даже импорт не сработал (крайне маловероятно при работающем интернете)
-            authMessage.textContent = 'Критическая ошибка: Не удалось загрузить Supabase как ES Module. Требуется локальный файл.';
+        // --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: ГАРАНТИРУЕМ ИНИЦИАЛИЗАЦИЮ ---
+        try {
+            // Инициализация Supabase клиента сразу после импорта
+            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            authMessage.textContent = 'Библиотека Supabase загружена. Инициализация игры...';
+            // Запуск основной логики после успешной инициализации
+            startMorskoyBoy(); 
+        } catch (e) {
+            console.error("Ошибка инициализации Supabase:", e);
+            authMessage.textContent = 'Критическая ошибка: Не удалось инициализировать Supabase.';
             authMessage.className = 'error-message';
         }
 
-        // 2. ВСЯ ИГРОВАЯ ЛОГИКА (Принимает функцию createClient как аргумент)
-        function startMorskoyBoy(clientFactory) {
-            try {
-                // Инициализация Supabase
-                supabase = clientFactory(SUPABASE_URL, SUPABASE_ANON_KEY);
-            } catch (e) {
-                console.error("Ошибка инициализации Supabase:", e);
-                authMessage.textContent = 'Критическая ошибка: Не удалось инициализировать Supabase.';
-                authMessage.className = 'error-message';
-                return;
-            }
 
+        // 2. ВСЯ ИГРОВАЯ ЛОГИКА (теперь не принимает аргументов, т.к. supabase — глобальная переменная модуля)
+        function startMorskoyBoy() {
             // --- КЭШИРОВАНИЕ ЭЛЕМЕНТОВ DOM ---
             const authSection = document.getElementById('auth-section');
             const gameSection = document.getElementById('game-section');
@@ -412,7 +407,8 @@
 
             let presenceChannel = null;
             let gameChannel = null;
-            let currentUserData = { id: null, username: null, gameId: null };
+            // Убедимся, что currentUserData.id имеет значение при вызове sendChallenge
+            let currentUserData = { id: null, username: null, gameId: null }; 
             let currentGameState = null;
             
             const BOARD_SIZE = 10;
@@ -500,20 +496,28 @@
                     return;
                 }
 
-                const { error: profileError } = await supabase.from('profiles').upsert({ id: data.user.id, username: username });
+                // Ждем сохранения профиля, чтобы избежать гонки данных.
+                // Если регистрация прошла, пользователь должен быть в data.user.
+                const user = data.user || (await supabase.auth.getUser()).data.user; 
+                
+                if (user) {
+                     const { error: profileError } = await supabase.from('profiles').upsert({ id: user.id, username: username });
 
-                if (profileError) {
-                    console.error('Ошибка сохранения профиля:', profileError.message);
-                    displayAuthMessage('Ошибка сохранения профиля. Попробуйте войти.', false);
-                    return;
+                    if (profileError) {
+                        console.error('Ошибка сохранения профиля:', profileError.message);
+                        displayAuthMessage('Ошибка сохранения профиля. Попробуйте войти.', false);
+                        return;
+                    }
+
+                    currentUserData.id = user.id;
+                    currentUserData.username = username;
+                    resetAuthFields();
+                    setupPresence(user.id, username);
+                    updateUI(user, username);
+                    displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
+                } else {
+                    displayAuthMessage('Ошибка: Пользователь не найден после регистрации.', false);
                 }
-
-                currentUserData.id = data.user.id;
-                currentUserData.username = username;
-                resetAuthFields();
-                setupPresence(data.user.id, username);
-                updateUI(data.user, username);
-                displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
             });
             
             // --- ЛОГИКА ПРИСУТСТВИЯ (МУЛЬТИПЛЕЕРНОЕ ЛОББИ) ---
@@ -605,7 +609,14 @@
             
             async function sendChallenge(targetId, targetUsername) {
                 if (!supabase || !presenceChannel || currentUserData.gameId) return alert('Ошибка инициализации или вы уже в игре.');
-
+                
+                // Проверка, что ID пользователя действительно установлен после входа
+                if (!currentUserData.id) {
+                    console.error("Попытка создать игру без currentUserData.id");
+                    return alert('Ошибка: Ваш ID не определен. Попробуйте выйти и войти снова.');
+                }
+                
+                // !!! ЭТА СТРОКА ВЫЗЫВАЕТ ВАШУ ОШИБКУ !!!
                 const { data: game, error: gameError } = await supabase
                     .from('games')
                     .insert([{ player1_id: currentUserData.id, status: 'lobby' }])
@@ -613,8 +624,9 @@
                     .single();
                 
                 if (gameError) {
-                    console.error('Ошибка создания игры:', gameError);
-                    return alert('Ошибка создания игры в базе данных.');
+                    // ЕСЛИ ВЫ ВИДИТЕ ЭТО, ТО ПРОБЛЕМА ТОЛЬКО В RLS НА ТАБЛИЦЕ GAMES.
+                    console.error('Ошибка создания игры:', gameError.message);
+                    return alert('Критическая ошибка создания игры: Проверьте RLS для INSERT на таблице GAMES.');
                 }
                 
                 const gameId = game.id;
