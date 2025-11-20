@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌊 Морской Бой - Мультиплеер</title>
     
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         /* --- 1. ЦВЕТА И ПЕРЕМЕННЫЕ --- */
         :root {
@@ -360,14 +362,27 @@
 
     </main>
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <script>
+        // ИНФОРМАЦИЯ О SUPABASE
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTITh7091kyxFFh8LL7ZAY';
         
-        // Инициализация Supabase: эта строка больше не должна выдавать ReferenceError
-        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabase = null;
+
+        // УСИЛЕНИЕ 3: Оборачивание всей инициализации в событие загрузки DOM (Пункт 10)
+        // Это гарантирует, что Supabase будет определен, когда код начнет выполнение.
+        document.addEventListener('DOMContentLoaded', function() {
+            // Инициализация Supabase. Если CDN не загрузится до этого момента,
+            // это будет последней линией защиты.
+            if (typeof Supabase !== 'undefined') {
+                supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                checkAuthStatus();
+            } else {
+                console.error("Критическая ошибка: Объект Supabase не определен. Проблема с загрузкой CDN.");
+                document.getElementById('auth-message').textContent = "Ошибка: Не удалось загрузить библиотеку Supabase. Попробуйте очистить кэш.";
+            }
+        });
+        
 
         const authSection = document.getElementById('auth-section');
         const gameSection = document.getElementById('game-section');
@@ -424,6 +439,8 @@
         // --- ЛОГИКА АУТЕНТИФИКАЦИИ ---
 
         signinButton.addEventListener('click', async () => {
+            if (!supabase) return displayAuthMessage('Идет загрузка... Попробуйте через секунду.', false);
+
             const username = usernameInput.value.trim();
             const password = passwordInput.value.trim();
             if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
@@ -447,6 +464,8 @@
         });
 
         signupButton.addEventListener('click', async () => {
+            if (!supabase) return displayAuthMessage('Идет загрузка... Попробуйте через секунду.', false);
+
             const username = usernameInput.value.trim();
             const password = passwordInput.value.trim();
             
@@ -574,7 +593,7 @@
         });
         
         async function sendChallenge(targetId, targetUsername) {
-            if (!presenceChannel || currentUserData.gameId) return alert('Вы уже в игре или канал не активен.');
+            if (!supabase || !presenceChannel || currentUserData.gameId) return alert('Ошибка инициализации или вы уже в игре.');
 
             const { data: game, error: gameError } = await supabase
                 .from('games')
@@ -949,6 +968,8 @@
         }
 
         async function checkAuthStatus() {
+            if (!supabase) return; // Ждем инициализации
+            
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
@@ -974,8 +995,6 @@
                 gameSection.style.display = 'none';
             }
         }
-
-        checkAuthStatus();
     </script>
 </body>
 </html>
