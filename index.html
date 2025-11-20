@@ -7,37 +7,39 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
-        /* 🎨 CSS (Красивый интерфейс) */
+        /* CSS (Черно-белый градиент и анимации) */
         :root {
-            --primary: #007bff;
-            --secondary: #6c757d;
-            --success: #28a745;
-            --danger: #dc3545;
-            --warning: #ffc107;
-            --info: #17a2b8;
-            --dark: #343a40;
-            --light: #f8f9fa;
+            --primary: #000000;
+            --secondary: #222222;
+            --light: #f5f5f5;
+            --background: linear-gradient(135deg, #e0e0e0 0%, #ffffff 100%);
+            --button-gradient: linear-gradient(90deg, #111111 0%, #333333 100%);
+            --success: #008000;
+            --danger: #cc0000;
+            --info: #0066cc;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light);
-            color: var(--dark);
+            background: var(--background);
+            color: var(--primary);
             margin: 0;
             padding: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-height: 100vh;
+            transition: background 0.5s ease;
         }
 
         header {
-            background-color: var(--primary);
+            background: var(--primary);
             color: white;
             width: 100%;
             text-align: center;
             padding: 25px 0;
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
 
         main {
@@ -47,55 +49,69 @@
         }
 
         .card {
-            background: white;
+            background: var(--light);
             padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
             margin-bottom: 25px;
+            border: 1px solid #cccccc;
+            animation: fadeIn 0.8s ease-out;
         }
         
-        /* Элементы формы и кнопки */
-        input[type="text"], button {
-            padding: 12px;
-            margin: 5px 0;
-            border-radius: 6px;
-            border: 1px solid #ced4da;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        input[type="text"], input[type="password"], button {
+            padding: 14px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid #888888;
             width: 100%;
             box-sizing: border-box;
             font-size: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+            outline: none;
         }
 
         button {
-            background-color: var(--success);
+            background: var(--button-gradient);
             color: white;
             border: none;
             cursor: pointer;
-            transition: background-color 0.3s, transform 0.1s;
+            font-weight: bold;
+            transition: opacity 0.3s, transform 0.1s;
         }
 
         button:hover:not(:disabled) {
-            background-color: #218838;
+            opacity: 0.9;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         }
         
         button:active {
-            transform: scale(0.99);
+            transform: scale(0.98);
         }
         
         button:disabled {
-            background-color: var(--secondary);
+            background: var(--secondary);
             cursor: not-allowed;
-            opacity: 0.6;
+            opacity: 0.5;
         }
 
         .logout-button {
-            background-color: var(--danger);
+            background: var(--danger);
             width: auto;
             padding: 8px 15px;
             margin-top: 10px;
             float: right;
         }
 
-        /* Список игроков */
         #online-players-list {
             list-style: none;
             padding: 0;
@@ -106,17 +122,16 @@
             justify-content: space-between;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid var(--light);
+            border-bottom: 1px solid #dddddd;
         }
 
         .challenge-button {
-            background-color: var(--warning);
+            background: var(--secondary);
             padding: 8px 15px;
             width: auto;
             font-size: 14px;
         }
         
-        /* Игровые поля */
         .boards {
             display: flex;
             justify-content: space-around;
@@ -142,42 +157,39 @@
         .cell {
             width: 30px;
             height: 30px;
-            border: 1px solid #b3e0ff;
+            border: 1px solid #cccccc;
+            background-color: #f0f0f0;
+            transition: background-color 0.2s, transform 0.1s;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
-            cursor: pointer;
-            background-color: #e6f7ff; /* Вода */
-            transition: background-color 0.1s;
         }
         
-        /* Клетки координат */
         .coord {
             background-color: var(--light);
-            cursor: default;
             font-weight: bold;
-            color: var(--dark);
-            border: 1px solid #b3e0ff;
+            color: var(--primary);
+            border: 1px solid #cccccc;
         }
         
-        /* Состояния клетки */
         .cell:hover:not(.coord):not(.ship):not(.hit):not(.miss):not(.disabled) {
-            background-color: #cceeff;
+            background-color: #dddddd;
+            transform: scale(1.05);
+            z-index: 10;
         }
 
         .ship {
-            background-color: var(--dark); /* Корабль */
+            background-color: var(--primary);
         }
 
         .hit {
-            background-color: var(--danger); /* Попадание */
+            background-color: var(--danger);
             color: white;
             font-size: 16px;
         }
 
         .miss {
-            background-color: var(--info); /* Промах */
+            background-color: var(--secondary);
             color: white;
             font-size: 16px;
         }
@@ -187,27 +199,24 @@
 
         .disabled {
             pointer-events: none;
-            opacity: 0.8;
+            opacity: 0.7;
             cursor: not-allowed !important;
-        }
-
-        /* Информационные блоки */
-        #active-game-info {
-            background-color: var(--light);
-            border-left: 5px solid var(--primary);
-            padding: 15px;
-            margin-top: 15px;
-            display: none;
         }
         
         #game-status-display {
             font-weight: bold;
-            color: var(--success);
+            color: var(--primary);
         }
         
         .turn-highlight {
             border: 2px solid var(--success) !important;
-            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+            box-shadow: 0 0 10px rgba(0, 128, 0, 0.5);
+        }
+        
+        #auth-section {
+            width: 100%;
+            max-width: 400px;
+            margin-top: 50px;
         }
     </style>
 </head>
@@ -223,7 +232,8 @@
             <h2>🔑 Вход / Регистрация</h2>
             <form id="auth-form">
                 <input type="text" id="username" placeholder="Введите ваше имя" required>
-                <button type="submit">Войти Анонимно</button>
+                <input type="password" id="password" placeholder="Пароль (для защиты ника)" required>
+                <button type="submit">Войти</button>
             </form>
         </section>
 
@@ -244,7 +254,7 @@
             <div id="boards-container" style="display: none;" class="card">
                 <h2 id="boards-title">🛥️ Расстановка кораблей</h2>
                 <div id="ship-placement-instructions">
-                    <p>Расставьте свои корабли. Поставлено **0** из **20** клеток.</p>
+                    <p>Расставьте свои корабли. Поставлено <b>0</b> из <b>20</b> клеток.</p>
                     <button id="start-battle-button" disabled>Начать Бой!</button>
                 </div>
 
@@ -270,17 +280,11 @@
     </main>
 
     <script>
-        // 🛠️ JavaScript (Логика)
-        
-        // ===================================================================
-        // 1. КОНФИГУРАЦИЯ SUPABASE И ЭЛЕМЕНТЫ
-        // ===================================================================
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlFPNITh7091kyxFFh8LL7ZAY';
         
         const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // DOM элементы
         const authSection = document.getElementById('auth-section');
         const gameSection = document.getElementById('game-section');
         const authForm = document.getElementById('auth-form');
@@ -300,40 +304,56 @@
         const myBoardWrapper = document.getElementById('my-board-wrapper');
         const opponentBoardWrapper = document.getElementById('opponent-board-wrapper');
 
-        // Глобальные переменные состояния
         let presenceChannel = null;
         let gameChannel = null;
         let currentUserData = { id: null, username: null, gameId: null };
-        let currentGameState = null; // Текущее состояние игры из Supabase
+        let currentGameState = null;
         
-        // Конфигурация игры и состояние расстановки
         const BOARD_SIZE = 10;
         const SHIPS_CONFIG = { '4-deck': 1, '3-deck': 2, '2-deck': 3, '1-deck': 4 };
         const TOTAL_SHIP_CELLS = Object.entries(SHIPS_CONFIG).reduce((sum, [size, count]) => sum + (parseInt(size.split('-')[0]) * count), 0);
         let myShipPlacement = []; 
         let isMyTurn = false;
         
-        // ===================================================================
-        // 2. АУТЕНТИФИКАЦИЯ И ПРИСУТСТВИЕ (PRESENCE)
-        // ===================================================================
-
         authForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value.trim();
-            if (!username) return;
+            const password = document.getElementById('password').value.trim();
+            
+            if (!username || !password) return alert('Введите имя и пароль.');
 
-            let { data: authData, error: authError } = await supabase.auth.signInAnonymously();
+            const email = username.toLowerCase() + '@battleship.local';
+            
+            let user = null;
+            let error = null;
 
-            if (authError) {
-                console.error('Ошибка входа:', authError.message);
-                return alert('Не удалось войти.');
+            let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+            if (signInData.user) {
+                user = signInData.user;
+            } else {
+                let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
+                    email, 
+                    password,
+                    options: { data: { username: username } }
+                });
+
+                if (signUpError) {
+                    error = signUpError;
+                } else if (signUpData.user) {
+                    user = signUpData.user;
+                    await supabase.from('profiles').upsert({ id: user.id, username: username });
+                    alert(`Добро пожаловать, ${username}! Вы зарегистрировали новый аккаунт.`);
+                }
             }
 
-            const user = authData.user;
+            if (error || !user) {
+                console.error('Ошибка аутентификации:', error?.message);
+                return alert('Ошибка входа/регистрации. Проверьте правильность пароля или попробуйте другой ник.');
+            }
+
             currentUserData.id = user.id;
             currentUserData.username = username;
-
-            await supabase.from('profiles').upsert({ id: user.id, username: username });
 
             setupPresence(user.id, username);
             updateUI(user, username);
@@ -419,10 +439,6 @@
             alert('Вы вышли из системы.');
         });
         
-        // ===================================================================
-        // 3. ЛОГИКА ВЫЗОВА И НАЧАЛА ИГРЫ
-        // ===================================================================
-
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('challenge-button')) {
                 const targetUserId = e.target.dataset.userId;
@@ -479,15 +495,16 @@
         async function joinGame(gameId, challengerUsername) {
             currentUserData.gameId = gameId;
             
-            // Выбираем, кто начнет первым (Player 1 или Player 2)
-            const firstTurnId = Math.random() < 0.5 ? gameId.player1_id : currentUserData.id;
+            const { data: initialGame } = await supabase.from('games').select('player1_id').eq('id', gameId).single();
+
+            const firstTurnId = Math.random() < 0.5 ? initialGame.player1_id : currentUserData.id;
 
             const { data: updatedGame, error } = await supabase
                 .from('games')
                 .update({ 
                     player2_id: currentUserData.id,
-                    status: 'placement', // Статус расстановки
-                    current_turn: firstTurnId // ID игрока, который начнет ходить
+                    status: 'placement',
+                    current_turn: firstTurnId 
                 })
                 .eq('id', gameId)
                 .select()
@@ -505,19 +522,16 @@
         async function startGame(gameData, opponentUsername, isChallenger) {
              currentGameState = gameData;
              
-             // UI
              activeGameInfo.style.display = 'block';
              boardsContainer.style.display = 'block';
              gameIdDisplay.textContent = gameData.id.substring(0, 8) + '...';
              opponentNameDisplay.textContent = opponentUsername;
              document.getElementById('players-list-card').style.display = 'none';
 
-             // Инициализация полей
              createBoard(myBoardElement, true, 'placement');
              createBoard(opponentBoardElement, false, 'attack');
              opponentBoardWrapper.style.display = 'none';
 
-             // Настройка логики расстановки
              document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
              myBoardElement.classList.remove('disabled');
              startBattleButton.onclick = () => finishPlacement(gameData.id, isChallenger);
@@ -526,10 +540,6 @@
              setupGameChannel(gameData.id);
         }
         
-        // ===================================================================
-        // 4. ЛОГИКА РАССТАНОВКИ КОРАБЛЕЙ
-        // ===================================================================
-
         function createBoard(container, isInteractive, mode) {
             container.innerHTML = '';
             const columns = [' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
@@ -602,8 +612,7 @@
             const placed = myShipPlacement.length;
             const instructions = document.getElementById('ship-placement-instructions');
             instructions.querySelector('p').innerHTML = `
-                Расставьте свои корабли. Поставлено **${placed}** из **${TOTAL_SHIP_CELLS}** клеток.
-                (Текущая логика проверяет только количество и соседство, но не форму кораблей!)
+                Расставьте свои корабли. Поставлено <b>${placed}</b> из <b>${TOTAL_SHIP_CELLS}</b> клеток.
             `;
         }
 
@@ -613,15 +622,14 @@
             return isComplete;
         }
         
-        async function finishPlacement(gameId, isChallenger) {
+        async function finishPlacement(gameId) {
             if (!checkPlacementComplete()) return alert('Расстановка не завершена!');
             
             startBattleButton.disabled = true;
             myBoardElement.classList.add('disabled');
             
-            const fieldToUpdate = isChallenger ? 'player1_board' : 'player2_board';
+            const fieldToUpdate = currentGameState.player1_id === currentUserData.id ? 'player1_board' : 'player2_board';
             
-            // Начальная структура данных поля
             const boardData = {
                 ships: myShipPlacement, 
                 hits: [],
@@ -630,7 +638,10 @@
 
             const updateObject = {};
             updateObject[fieldToUpdate] = boardData;
-            updateObject['status'] = 'in_progress'; // Ставим статус IN_PROGRESS
+            
+            if (currentGameState.player1_board && currentGameState.player2_board) {
+                updateObject['status'] = 'in_progress'; 
+            }
 
             const { error } = await supabase
                 .from('games')
@@ -639,15 +650,11 @@
 
             if (error) {
                 console.error('Ошибка сохранения расстановки:', error);
-                return alert('Ошибка сохранения кораблей.');
+                return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова.');
             }
 
             gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
         }
-
-        // ===================================================================
-        // 5. ЛОГИКА СИНХРОНИЗАЦИИ ИГРЫ (REALTIME)
-        // ===================================================================
 
         function setupGameChannel(gameId) {
             if (gameChannel) supabase.removeChannel(gameChannel);
@@ -668,66 +675,77 @@
             
             const myBoard = gameData.player1_id === currentUserData.id ? gameData.player1_board : gameData.player2_board;
             const opponentBoard = gameData.player1_id === currentUserData.id ? gameData.player2_board : gameData.player1_board;
-            const opponentId = gameData.player1_id === currentUserData.id ? gameData.player2_id : gameData.player1_id;
 
-            // 1. Проверяем, закончена ли расстановка
             if (!myBoard || !opponentBoard) {
-                // Если оба поля еще не заполнены (null), продолжаем ждать расстановку
+                if (myBoard && gameData.status === 'placement') {
+                    gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
+                }
                 return;
             }
             
-            // Если поля заполнены, переходим к бою
             document.getElementById('boards-title').textContent = '⚔️ Поле Боя';
             document.getElementById('ship-placement-instructions').style.display = 'none';
             opponentBoardWrapper.style.display = 'block';
 
-            // 2. Определяем, чей ход
+            const isGameOver = checkWinCondition(opponentBoard);
+            if (isGameOver) {
+                currentGameState.status = 'finished';
+                const winnerId = currentUserData.id;
+                
+                await supabase.from('games').update({ status: 'finished', winner_id: winnerId }).eq('id', currentGameState.id);
+                gameStatusDisplay.textContent = `🎉 ВЫ ПОБЕДИЛИ!`;
+                turnIndicator.textContent = 'Игра окончена.';
+                renderMyBoard(myBoard);
+                renderOpponentBoard(opponentBoard);
+                return alert('Поздравляем! Вы потопили все корабли противника!');
+            } else if (gameData.status === 'finished') {
+                gameStatusDisplay.textContent = `😭 Вы проиграли.`;
+                turnIndicator.textContent = 'Игра окончена.';
+                renderMyBoard(myBoard);
+                renderOpponentBoard(opponentBoard);
+                return;
+            }
+
             isMyTurn = gameData.current_turn === currentUserData.id;
             
-            // Обновляем индикатор хода
-            myBoardWrapper.classList.toggle('turn-highlight', !isMyTurn); // Подсвечиваем наше, когда не наш ход (чтобы видеть атаки)
-            opponentBoardWrapper.classList.toggle('turn-highlight', isMyTurn); // Подсвечиваем поле атаки, когда наш ход
+            myBoardWrapper.classList.toggle('turn-highlight', !isMyTurn);
+            opponentBoardWrapper.classList.toggle('turn-highlight', isMyTurn);
             turnIndicator.innerHTML = isMyTurn 
                 ? '<span style="color:var(--success);">✅ ВАШ ХОД! Атакуйте!</span>' 
                 : '<span style="color:var(--danger);">⏳ ХОД ПРОТИВНИКА. Ожидайте...</span>';
 
-            // 3. Обновляем визуализацию полей
             renderMyBoard(myBoard);
             renderOpponentBoard(opponentBoard);
         }
         
-        // ===================================================================
-        // 6. ЛОГИКА СТРЕЛЬБЫ
-        // ===================================================================
+        function checkWinCondition(opponentBoard) {
+            return opponentBoard.hits.length === TOTAL_SHIP_CELLS;
+        }
 
         function handleAttackClick(e) {
-            if (!isMyTurn) return alert('Сейчас ход противника!');
+            if (!isMyTurn || currentGameState.status !== 'in_progress') return alert('Сейчас не ваш ход или игра еще не началась!');
             
             const cell = e.target;
             const coord = cell.dataset.coord;
 
-            if (cell.classList.contains('hit') || cell.classList.contains('miss')) {
+            const targetBoard = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
+            if (targetBoard.hits.includes(coord) || targetBoard.misses.includes(coord)) {
                 return alert('В эту клетку вы уже стреляли!');
             }
             
-            // Отключаем клики, пока не получим ответ
             opponentBoardElement.classList.add('disabled');
 
-            // Вызываем главную функцию атаки
             fireShot(coord);
         }
 
         async function fireShot(targetCoord) {
-            if (!currentGameState) return console.error("Нет данных игры.");
-            
-            // Определяем, какое поле противника будем атаковать
             const targetPlayerField = currentGameState.player1_id === currentUserData.id ? 'player2_board' : 'player1_board';
             const targetBoard = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
+            
             const opponentId = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_id : currentGameState.player1_id;
-
+            
             let isHit = targetBoard.ships.includes(targetCoord);
             
-            // 1. Обновляем поле противника (наше атакующее поле)
             const updatedHits = [...targetBoard.hits];
             const updatedMisses = [...targetBoard.misses];
 
@@ -736,8 +754,7 @@
             } else {
                 updatedMisses.push(targetCoord);
             }
-
-            // 2. Обновляем состояние игры в БД
+            
             const updatedBoardData = { 
                 ships: targetBoard.ships, 
                 hits: updatedHits, 
@@ -747,7 +764,6 @@
             const updateObject = {};
             updateObject[targetPlayerField] = updatedBoardData;
             
-            // Меняем ход
             updateObject.current_turn = isHit ? currentUserData.id : opponentId; 
 
             const { error } = await supabase
@@ -759,32 +775,24 @@
                 console.error('Ошибка при выстреле:', error);
                 alert('Ошибка сервера при выстреле.');
             }
-            // Реальная отрисовка произойдет через Realtime при получении UPDATED данных
         }
-
-        // ===================================================================
-        // 7. ОТРЕНДЕРИНГ ПОЛЕЙ ПОСЛЕ ОБНОВЛЕНИЯ
-        // ===================================================================
         
         function renderMyBoard(myBoardData) {
-            // Отрисовка нашего поля (видим свои корабли, промахи и попадания противника)
             const board = myBoardElement;
-            board.classList.remove('disabled');
 
             for (const cell of board.querySelectorAll('.cell')) {
                 const coord = cell.dataset.coord;
                 cell.classList.remove('ship', 'hit', 'miss');
 
-                // Показываем свои корабли
                 if (myBoardData.ships.includes(coord)) {
                     cell.classList.add('ship');
                 }
-                // Показываем, куда попал противник
+                
                 if (myBoardData.hits.includes(coord)) {
                     cell.classList.add('hit');
-                    cell.classList.remove('ship'); // Если попали в наш корабль
+                    cell.classList.remove('ship');
                 }
-                // Показываем промахи противника
+                
                 if (myBoardData.misses.includes(coord)) {
                     cell.classList.add('miss');
                 }
@@ -792,35 +800,23 @@
         }
 
         function renderOpponentBoard(opponentBoardData) {
-            // Отрисовка поля противника (видим только свои промахи и попадания)
             const board = opponentBoardElement;
             
-            // Если наш ход, разрешаем клик, если нет - запрещаем
-            board.classList.toggle('disabled', !isMyTurn);
+            board.classList.toggle('disabled', !isMyTurn || currentGameState.status !== 'in_progress');
             
             for (const cell of board.querySelectorAll('.cell')) {
                 const coord = cell.dataset.coord;
                 cell.classList.remove('hit', 'miss');
 
-                // Показываем наши попадания
                 if (opponentBoardData.hits.includes(coord)) {
                     cell.classList.add('hit');
                 }
-                // Показываем наши промахи
+                
                 if (opponentBoardData.misses.includes(coord)) {
                     cell.classList.add('miss');
                 }
             }
-            
-            // Если игра окончена, отключаем клик полностью
-            if (currentGameState.status === 'finished') {
-                board.classList.add('disabled');
-            }
         }
-
-        // ===================================================================
-        // 8. ИНИЦИАЛИЗАЦИЯ
-        // ===================================================================
 
         async function checkAuthStatus() {
             const { data: { user } } = await supabase.auth.getUser();
