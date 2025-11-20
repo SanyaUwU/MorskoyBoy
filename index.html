@@ -63,7 +63,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        input[type="text"], input[type="password"], button {
+        input[type="text"], input[type="password"], .action-button {
             padding: 14px;
             margin: 8px 0;
             border-radius: 8px;
@@ -80,6 +80,7 @@
             outline: none;
         }
 
+        /* Общий стиль для всех кнопок */
         button {
             background: var(--button-gradient);
             color: white;
@@ -104,6 +105,40 @@
             opacity: 0.5;
         }
 
+        /* Стили для кнопок входа/регистрации */
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .auth-buttons button {
+            flex: 1;
+            width: 50%;
+            padding: 12px;
+        }
+        
+        #auth-message {
+            text-align: center;
+            margin-top: 15px;
+            font-weight: bold;
+            min-height: 20px; /* Для предотвращения сдвига */
+        }
+
+        .success-message {
+            color: var(--success);
+            animation: pulse 1s ease-out infinite alternate;
+        }
+
+        .error-message {
+            color: var(--danger);
+        }
+        
+        @keyframes pulse {
+            from { opacity: 1; }
+            to { opacity: 0.7; }
+        }
+        
         .logout-button {
             background: var(--danger);
             width: auto;
@@ -112,6 +147,7 @@
             float: right;
         }
 
+        /* Список игроков */
         #online-players-list {
             list-style: none;
             padding: 0;
@@ -123,6 +159,12 @@
             align-items: center;
             padding: 12px 0;
             border-bottom: 1px solid #dddddd;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
         .challenge-button {
@@ -132,6 +174,7 @@
             font-size: 14px;
         }
         
+        /* Игровые поля */
         .boards {
             display: flex;
             justify-content: space-around;
@@ -233,7 +276,11 @@
             <form id="auth-form">
                 <input type="text" id="username" placeholder="Введите ваше имя" required>
                 <input type="password" id="password" placeholder="Пароль (для защиты ника)" required>
-                <button type="submit">Войти</button>
+                <div class="auth-buttons">
+                    <button type="button" id="signin-button" class="action-button">Войти</button>
+                    <button type="button" id="signup-button" class="action-button">Зарегистрироваться</button>
+                </div>
+                <p id="auth-message"></p>
             </form>
         </section>
 
@@ -244,7 +291,12 @@
                 <button id="logout-button" class="logout-button">Выйти</button></p>
             </div>
             
-            <div id="active-game-info" class="card">
+            <div id="players-list-card" class="card">
+                <h2>👥 Игроки Онлайн</h2>
+                <ul id="online-players-list"></ul>
+            </div>
+            
+            <div id="active-game-info" class="card" style="display: none;">
                 <h3>🎮 Активная игра</h3>
                 <p>ID комнаты: <strong id="game-id-display"></strong> | Соперник: <strong id="opponent-name-display"></strong></p>
                 <p>Статус: <strong id="game-status-display">Ожидание...</strong></p>
@@ -271,10 +323,6 @@
                 </div>
             </div>
 
-            <div id="players-list-card" class="card">
-                <h2>👥 Игроки Онлайн</h2>
-                <ul id="online-players-list"></ul>
-            </div>
         </section>
 
     </main>
@@ -303,6 +351,10 @@
         const startBattleButton = document.getElementById('start-battle-button');
         const myBoardWrapper = document.getElementById('my-board-wrapper');
         const opponentBoardWrapper = document.getElementById('opponent-board-wrapper');
+        const signinButton = document.getElementById('signin-button');
+        const signupButton = document.getElementById('signup-button');
+        const authMessage = document.getElementById('auth-message');
+        const playersListCard = document.getElementById('players-list-card');
 
         let presenceChannel = null;
         let gameChannel = null;
@@ -315,49 +367,84 @@
         let myShipPlacement = []; 
         let isMyTurn = false;
         
-        authForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // Вспомогательная функция для сообщений
+        function displayAuthMessage(message, isSuccess = true) {
+            authMessage.textContent = message;
+            authMessage.className = isSuccess ? 'success-message' : 'error-message';
+            setTimeout(() => {
+                authMessage.textContent = '';
+                authMessage.className = '';
+            }, 5000);
+        }
+
+        // Обработчик кнопки "Войти"
+        signinButton.addEventListener('click', async () => {
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
             
-            if (!username || !password) return alert('Введите имя и пароль.');
+            if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
 
             const email = username.toLowerCase() + '@battleship.local';
             
-            let user = null;
-            let error = null;
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-            let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-
-            if (signInData.user) {
-                user = signInData.user;
-            } else {
-                let { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
-                    email, 
-                    password,
-                    options: { data: { username: username } }
-                });
-
-                if (signUpError) {
-                    error = signUpError;
-                } else if (signUpData.user) {
-                    user = signUpData.user;
-                    await supabase.from('profiles').upsert({ id: user.id, username: username });
-                    alert(`Добро пожаловать, ${username}! Вы зарегистрировали новый аккаунт.`);
+            if (error) {
+                console.error('Ошибка входа:', error.message);
+                if (error.status === 400 || error.message.includes('not found') || error.message.includes('invalid login credentials')) {
+                    displayAuthMessage('Пользователь не найден или неверный пароль.', false);
+                } else {
+                    displayAuthMessage('Ошибка входа. Попробуйте снова.', false);
                 }
+                return;
             }
 
-            if (error || !user) {
-                console.error('Ошибка аутентификации:', error?.message);
-                return alert('Ошибка входа/регистрации. Проверьте правильность пароля или попробуйте другой ник.');
-            }
-
-            currentUserData.id = user.id;
+            currentUserData.id = data.user.id;
             currentUserData.username = username;
 
-            setupPresence(user.id, username);
-            updateUI(user, username);
+            setupPresence(data.user.id, username);
+            updateUI(data.user, username);
+            displayAuthMessage(`Добро пожаловать, ${username}! Вход выполнен.`, true);
         });
+
+        // Обработчик кнопки "Зарегистрироваться"
+        signupButton.addEventListener('click', async () => {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
+
+            const email = username.toLowerCase() + '@battleship.local';
+            
+            const { data, error } = await supabase.auth.signUp({ 
+                email, 
+                password,
+                options: { data: { username: username } }
+            });
+
+            if (error) {
+                console.error('Ошибка регистрации:', error.message);
+                if (error.message.includes('already registered')) {
+                    displayAuthMessage('Этот ник уже занят. Пожалуйста, войдите или выберите другой.', false);
+                } else {
+                    displayAuthMessage('Ошибка регистрации. Попробуйте снова.', false);
+                }
+                return;
+            }
+
+            // Если регистрация успешна
+            await supabase.from('profiles').upsert({ id: data.user.id, username: username });
+
+            currentUserData.id = data.user.id;
+            currentUserData.username = username;
+
+            setupPresence(data.user.id, username);
+            updateUI(data.user, username);
+            displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
+        });
+        
+        // Предотвращаем отправку формы по Enter
+        authForm.addEventListener('submit', (e) => e.preventDefault());
+
 
         function setupPresence(userId, username) {
             if (presenceChannel) supabase.removeChannel(presenceChannel);
@@ -398,6 +485,9 @@
                 onlinePlayersList.innerHTML = '<li>Нет других игроков онлайн.</li>';
                 return;
             }
+            
+            // Сортировка по имени
+            players.sort((a, b) => a.username.localeCompare(b.username));
 
             players.forEach(player => {
                 const listItem = document.createElement('li');
@@ -414,6 +504,7 @@
             gameSection.style.display = 'block';
             currentUsernameSpan.textContent = username;
             currentUserIdSpan.textContent = user.id.substring(0, 8) + '...';
+            playersListCard.style.display = 'block'; 
         }
 
         logoutButton.addEventListener('click', async () => {
@@ -436,7 +527,7 @@
             currentUserData = { id: null, username: null, gameId: null };
             myShipPlacement = [];
             
-            alert('Вы вышли из системы.');
+            displayAuthMessage('Вы вышли из системы.', true);
         });
         
         document.addEventListener('click', (e) => {
@@ -526,7 +617,7 @@
              boardsContainer.style.display = 'block';
              gameIdDisplay.textContent = gameData.id.substring(0, 8) + '...';
              opponentNameDisplay.textContent = opponentUsername;
-             document.getElementById('players-list-card').style.display = 'none';
+             playersListCard.style.display = 'none';
 
              createBoard(myBoardElement, true, 'placement');
              createBoard(opponentBoardElement, false, 'attack');
