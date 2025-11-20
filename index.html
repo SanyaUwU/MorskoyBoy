@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌊 Морской Бой - Мультиплеер</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
@@ -12,11 +13,9 @@
             --primary: #000000;
             --secondary: #222222;
             --light: #f5f5f5;
-            --success: #00a84f; /* Более яркий зеленый */
+            --success: #00a84f; 
             --danger: #d90000;
-            --info: #0066cc;
             --shadow-dark: rgba(0, 0, 0, 0.4);
-            --shadow-light: rgba(255, 255, 255, 0.5);
         }
 
         /* --- 2. БАЗОВЫЕ СТИЛИ И ФОН С ЧАСТИЦАМИ --- */
@@ -52,22 +51,18 @@
             animation: moveParticle 20s infinite linear;
         }
 
-        /* Генерация 50 частиц с разным размером и скоростью */
-        
         .particle:nth-child(1) { width: 15px; height: 15px; top: 10%; left: 20%; animation-duration: 18s; }
         .particle:nth-child(2) { width: 10px; height: 10px; top: 50%; left: 70%; animation-duration: 25s; }
         .particle:nth-child(3) { width: 20px; height: 20px; top: 80%; left: 5%; animation-duration: 22s; }
         .particle:nth-child(4) { width: 8px; height: 8px; top: 30%; left: 90%; animation-duration: 30s; }
         .particle:nth-child(5) { width: 12px; height: 12px; top: 65%; left: 40%; animation-duration: 15s; }
         .particle:nth-child(6) { width: 7px; height: 7px; top: 15%; left: 60%; animation-duration: 28s; }
-        /* (Для экономии места в ответе добавлено только 6, но можно добавить до 50) */
 
         @keyframes moveParticle {
             0% { transform: translate(0, 0) rotate(0deg); opacity: 0.5; }
             50% { transform: translate(100vw, 50vh) rotate(180deg); opacity: 0.2; }
             100% { transform: translate(0, 100vh) rotate(360deg); opacity: 0.5; }
         }
-
 
         header {
             background: var(--primary);
@@ -88,7 +83,7 @@
         }
 
         .card {
-            background: rgba(255, 255, 255, 0.1); /* Полупрозрачный фон */
+            background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(5px);
             padding: 25px;
             border-radius: 12px;
@@ -259,7 +254,7 @@
         }
 
         .ship {
-            background-color: #777777; /* Серый корабль */
+            background-color: #777777;
         }
 
         .hit {
@@ -269,7 +264,7 @@
         }
 
         .miss {
-            background-color: #004488; /* Глубокий синий промах */
+            background-color: #004488;
             color: white;
             font-size: 16px;
         }
@@ -369,8 +364,9 @@
 
     <script>
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlFPNITh7091kyxFFh8LL7ZAY';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTITh7091kyxFFh8LL7ZAY';
         
+        // ИНИЦИАЛИЗАЦИЯ: Supabase теперь определен и работает
         const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const authSection = document.getElementById('auth-section');
@@ -474,7 +470,6 @@
                 return;
             }
 
-            // Добавление ника в таблицу profiles после успешной регистрации
             const { error: profileError } = await supabase.from('profiles').upsert({ id: data.user.id, username: username });
 
             if (profileError) {
@@ -544,6 +539,29 @@
                 onlinePlayersList.appendChild(listItem);
             });
         }
+
+        logoutButton.addEventListener('click', async () => {
+            if (presenceChannel) {
+                await presenceChannel.untrack();
+                supabase.removeChannel(presenceChannel);
+                presenceChannel = null;
+            }
+            if (gameChannel) {
+                supabase.removeChannel(gameChannel);
+                gameChannel = null;
+            }
+            
+            await supabase.auth.signOut();
+            
+            authSection.style.display = 'block';
+            gameSection.style.display = 'none';
+            boardsContainer.style.display = 'none';
+            activeGameInfo.style.display = 'none';
+            currentUserData = { id: null, username: null, gameId: null };
+            myShipPlacement = [];
+            
+            displayAuthMessage('Вы вышли из системы.', true);
+        });
         
         // --- ЛОГИКА ИГРЫ И ВЫЗОВОВ ---
         
@@ -647,9 +665,6 @@
              
              setupGameChannel(gameData.id);
         }
-        
-        // (Остальные игровые функции createBoard, handlePlacementClick, finishPlacement, handleGameUpdate и т.д. остаются без изменений.
-        // Я опущу их здесь для краткости, так как они были полностью функциональны в предыдущих версиях.)
         
         function createBoard(container, isInteractive, mode) {
             container.innerHTML = '';
@@ -937,7 +952,6 @@
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                // Если пользователь найден, получаем его ник
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('username')
