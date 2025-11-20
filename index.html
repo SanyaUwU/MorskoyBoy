@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌊 Морской Бой - Мультиплеер (Supabase + GitHub Pages)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        /* 🎨 CSS (style.css) */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            background-color: #007bff;
+            color: white;
+            width: 100%;
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        input[type="text"], button {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        /* Стили для списка игроков */
+        #online-players-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        #online-players-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        #online-players-list li:last-child {
+            border-bottom: none;
+        }
+
+        .challenge-button {
+            background-color: #ffc107;
+            padding: 5px 10px;
+            width: auto;
+            font-size: 0.9em;
+        }
+        
+        .logout-button {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🌊 Морской Бой (Battleship)</h1>
+    </header>
+
+    <main>
+        <section id="auth-section" class="card">
+            <h2>🔑 Вход / Регистрация</h2>
+            <form id="auth-form">
+                <input type="text" id="username" placeholder="Введите ваше имя" required>
+                <button type="submit">Войти Анонимно</button>
+            </form>
+        </section>
+
+        <section id="game-section" style="display: none;">
+            <div id="user-info" class="card">
+                <h3>Добро пожаловать, <span id="current-username"></span>!</h3>
+                <p>Ваш ID: <span id="current-user-id"></span></p>
+                <button id="logout-button" class="logout-button">Выйти</button>
+            </div>
+
+            <div id="players-list-card" class="card">
+                <h2>👥 Игроки Онлайн</h2>
+                <ul id="online-players-list">
+                    </ul>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // 🛠️ JavaScript (script.js)
+        
+        // ===================================================================
+        // ❗ ШАГ 1: ЗАМЕНИТЕ ЭТИ ЗНАЧЕНИЯ НА ВАШИ КЛЮЧИ SUPABASE
+        // ===================================================================
+        const SUPABASE_URL = 'ВАШ_SUPABASE_URL'; 
+        const SUPABASE_ANON_KEY = 'ВАШ_SUPABASE_ANON_KEY';
+        
+        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ===================================================================
+        // ❗ ШАГ 2: СОЗДАЙТЕ ТАБЛИЦУ 'profiles' В SUPABASE
+        //   В редакторе SQL в Supabase выполните:
+        /*
+            create table profiles (
+              id uuid references auth.users not null primary key,
+              username text
+            );
+            
+            -- Включите Realtime для таблицы profiles
+            -- Установите RLS (Row Level Security) на "ON" и настройте политики:
+            -- Policy 1: SELECT для всех пользователей
+            -- Policy 2: INSERT/UPDATE для пользователей с matching ID
+        */
+        // ===================================================================
+
+        // DOM элементы
+        const authSection = document.getElementById('auth-section');
+        const gameSection = document.getElementById('game-section');
+        const authForm = document.getElementById('auth-form');
+        const currentUsernameSpan = document.getElementById('current-username');
+        const currentUserIdSpan = document.getElementById('current-user-id');
+        const onlinePlayersList = document.getElementById('online-players-list');
+        const logoutButton = document.getElementById('logout-button');
+
+        let presenceChannel = null;
+        let currentUserData = { id: null, username: null };
+
+        /**
+         * Обрабатывает форму входа, выполняет анонимный вход и обновляет состояние UI.
+         */
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            if (!username) return;
+
+            // 1. Анонимный вход
+            let { data: authData, error: authError } = await supabase.auth.signInAnonymously();
+
+            if (authError) {
+                console.error('Ошибка входа:', authError.message);
+                alert('Не удалось войти. Проверьте консоль.');
+                return;
+            }
+
+            const user = authData.user;
+            currentUserData.id = user.id;
+            currentUserData.username = username;
+
+            // 2. Обновление профиля с именем пользователя
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({ id: user.id, username: username });
+
+            if (profileError) {
+                console.error('Ошибка обновления профиля:', profileError.message);
+                alert('Ошибка сохранения имени пользователя. Продолжение возможно, но может быть нестабильно.');
+            }
+
+            // 3. Инициализация канала присутствия
+            setupPresence(user.id, username);
+            updateUI(user, username);
+        });
+
+        /**
+         * Настраивает канал Supabase Realtime Presence для отслеживания онлайн-пользователей.
+         * @param {string} userId - ID текущего пользователя.
+         * @param {string} username - Имя текущего пользователя.
+         */
+        function setupPresence(userId, username) {
+            if (presenceChannel) {
+                // Если канал уже существует, отписываемся, чтобы избежать дублирования
+                supabase.removeChannel(presenceChannel);
+            }
+
+            // Создаем канал для всех онлайн-игроков
+            presenceChannel = supabase.channel('online-players', {
+                config: {
+                    // Используем уникальный ID пользователя как ключ присутствия
+                    presence: { key: userId }
+                }
+            });
+
+            // Обработчик для обновления списка присутствия
+            presenceChannel.on('presence', { event: 'sync' }, () => {
+                const state = presenceChannel.presenceState();
+                displayOnlinePlayers(state, userId);
+            });
+            
+            // Обработчик для отправки/приема вызова на игру (Broadcast)
+            presenceChannel.on('broadcast', { event: 'challenge' }, (payload) => {
+                handleIncomingChallenge(payload.payload);
+            });
+
+            // Подписываемся и объявляем наше присутствие
+            presenceChannel
+                .subscribe(async (status) => {
+                    if (status === 'SUBSCRIBED') {
+                        // Отслеживаем нашего пользователя, передавая ID и имя
+                        const { error } = await presenceChannel.track({ user_id: userId, username: username });
+                        if (error) console.error('Ошибка отслеживания присутствия:', error);
+                    }
+                });
+        }
+
+        /**
+         * Отображает список онлайн-игроков, исключая текущего пользователя.
+         * @param {object} state - Состояние присутствия от Supabase.
+         * @param {string} currentUserId - ID текущего пользователя.
+         */
+        function displayOnlinePlayers(state, currentUserId) {
+            onlinePlayersList.innerHTML = '';
+            const players = [];
+
+            // Преобразуем объект состояния в плоский список игроков
+            for (const key in state) {
+                // Берем только первое объявление presence (одно устройство на пользователя)
+                const player = state[key][0]; 
+                
+                // Добавляем только тех, кто не является текущим пользователем
+                if (player.user_id !== currentUserId) {
+                    players.push(player);
+                }
+            }
+
+            if (players.length === 0) {
+                onlinePlayersList.innerHTML = '<li>Нет других игроков онлайн. Пригласите друга!</li>';
+                return;
+            }
+
+            players.forEach(player => {
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `
+                    <span>${player.username}</span>
+                    <button class="challenge-button" data-user-id="${player.user_id}" data-username="${player.username}">Вызвать на бой 💥</button>
+                `;
+                onlinePlayersList.appendChild(listItem);
+            });
+        }
+
+        /**
+         * Обновляет отображение пользовательского интерфейса после входа.
+         * @param {object} user - Объект пользователя Supabase.
+         * @param {string} username - Имя пользователя.
+         */
+        function updateUI(user, username) {
+            authSection.style.display = 'none';
+            gameSection.style.display = 'block';
+            currentUsernameSpan.textContent = username;
+            currentUserIdSpan.textContent = user.id.substring(0, 8) + '...'; // Укороченный ID
+        }
+
+        /**
+         * Обрабатывает выход пользователя.
+         */
+        logoutButton.addEventListener('click', async () => {
+            // 1. Отписываемся от Presence
+            if (presenceChannel) {
+                await presenceChannel.untrack();
+                supabase.removeChannel(presenceChannel);
+                presenceChannel = null;
+            }
+            
+            // 2. Выходим из Supabase Auth
+            await supabase.auth.signOut();
+            
+            // 3. Обновляем UI
+            authSection.style.display = 'block';
+            gameSection.style.display = 'none';
+            
+            // Очистка данных
+            currentUserData = { id: null, username: null };
+            onlinePlayersList.innerHTML = '';
+            document.getElementById('username').value = '';
+            alert('Вы вышли из системы.');
+        });
+        
+        // -------------------------------------------------------------
+        // Логика вызова на игру (Challenge)
+        // -------------------------------------------------------------
+
+        /**
+         * Обработчик клика по кнопке "Вызвать на бой".
+         */
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('challenge-button')) {
+                const targetUserId = e.target.dataset.userId;
+                const targetUsername = e.target.dataset.username;
+                
+                sendChallenge(targetUserId, targetUsername);
+            }
+        });
+        
+        /**
+         * Отправляет вызов на игру через Realtime Broadcast.
+         * @param {string} targetId - ID игрока, которого вызываем.
+         * @param {string} targetUsername - Имя игрока.
+         */
+        async function sendChallenge(targetId, targetUsername) {
+            if (!presenceChannel) return alert('Ошибка: Канал присутствия не активен.');
+
+            // Создаем уникальный ID для этой игры (комнаты)
+            const gameId = crypto.randomUUID(); 
+            
+            // Отправляем вызов через общий канал Presence.
+            // Все, кто слушает, получат его, но только целевой игрок будет реагировать.
+            const { error } = await presenceChannel.send({
+                type: 'broadcast',
+                event: 'challenge',
+                payload: {
+                    // Кто вызывает
+                    challengerId: currentUserData.id,
+                    challengerUsername: currentUserData.username,
+                    
+                    // Кого вызываем
+                    targetId: targetId,
+                    targetUsername: targetUsername,
+                    
+                    // ID комнаты для игры
+                    gameId: gameId
+                }
+            });
+
+            if (error) {
+                console.error('Ошибка отправки вызова:', error);
+                alert('Ошибка отправки вызова.');
+            } else {
+                alert(`Вызов отправлен игроку ${targetUsername}. Ожидайте ответа... (ID игры: ${gameId})`);
+                // В реальной игре здесь будет запуск ожидания и/или создание записи в таблице 'games'
+            }
+        }
+        
+        /**
+         * Обрабатывает входящий вызов на игру.
+         * @param {object} payload - Данные вызова (challengerId, gameId, и т.д.).
+         */
+        function handleIncomingChallenge(payload) {
+            // Проверяем, что вызов предназначен именно нам
+            if (payload.targetId === currentUserData.id) {
+                const confirmChallenge = confirm(
+                    `Игрок ${payload.challengerUsername} вызывает вас на Морской Бой! Принять? \n(ID игры: ${payload.gameId})`
+                );
+
+                if (confirmChallenge) {
+                    alert(`Вы приняли вызов! Переход к игре ${payload.gameId}.`);
+                    // **СЛЕДУЮЩИЙ ШАГ:** Здесь должна начаться логика создания/присоединения к игре в базе данных.
+                    startGame(payload.gameId, payload.challengerId, currentUserData.id, true);
+                } else {
+                    // В реальной игре нужно отправить ответ о неприятии вызова.
+                    alert(`Вы отказались от вызова.`);
+                }
+            }
+        }
+        
+        /**
+         * Заглушка для старта игры (следующий этап).
+         */
+        function startGame(gameId, player1Id, player2Id, isChallenged) {
+             console.log(`Начинаем игру! ID: ${gameId}, Игрок 1: ${player1Id}, Игрок 2: ${player2Id}`);
+             // Здесь будет логика создания записи в таблице 'games' и подписка на канал Realtime этой игры.
+        }
+        
+        // -------------------------------------------------------------
+        // Инициализация при загрузке
+        // -------------------------------------------------------------
+
+        /**
+         * Проверяет текущее состояние аутентификации при загрузке страницы.
+         */
+        async function checkAuthStatus() {
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (user) {
+                // Если пользователь уже аутентифицирован (например, вернулся на страницу)
+                
+                // Получаем имя пользователя из таблицы 'profiles'
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('username')
+                    .eq('id', user.id)
+                    .single();
+
+                if (error || !profile) {
+                    // Если профиль не найден (редкий случай), заставляем пользователя войти снова
+                    await supabase.auth.signOut();
+                    return;
+                }
+                
+                currentUserData.id = user.id;
+                currentUserData.username = profile.username;
+
+                setupPresence(user.id, profile.username);
+                updateUI(user, profile.username);
+                
+            } else {
+                // Если нет активной сессии, показываем форму входа
+                authSection.style.display = 'block';
+                gameSection.style.display = 'none';
+            }
+        }
+
+        checkAuthStatus();
+    </script>
+</body>
+</html>
