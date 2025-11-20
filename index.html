@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌊 Морской Бой - Мультиплеер</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <style>
         /* --- 1. ЦВЕТА И ПЕРЕМЕННЫЕ --- */
         :root {
@@ -361,12 +359,14 @@
         </section>
 
     </main>
-
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <script>
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTITh7091kyxFFh8LL7ZAY';
         
-        // ИНИЦИАЛИЗАЦИЯ: Supabase теперь определен и работает
+        // Инициализация Supabase: эта строка больше не должна выдавать ReferenceError
         const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const authSection = document.getElementById('auth-section');
@@ -465,7 +465,7 @@
                 if (error.message.includes('already registered')) {
                     displayAuthMessage('Ошибка: Этот ник уже занят.', false);
                 } else {
-                    displayAuthMessage('Ошибка регистрации. Проверьте настройки Supabase.', false);
+                    displayAuthMessage('Ошибка регистрации. Проверьте настройки Supabase (RLS, CORS).', false);
                 }
                 return;
             }
