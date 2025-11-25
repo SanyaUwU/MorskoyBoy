@@ -407,7 +407,7 @@
         let supabase = null;
         const authMessage = document.getElementById('auth-message');
         
-        // --- ГАРАНТИРУЕМ ИНИЦИАЛИЗАЦИЮ (Исправление ReferenceError) ---
+        // --- ГАРАНТИРУЕМ ИНИЦИАЛИЗАЦИЮ ---
         try {
             // Инициализация клиента Supabase
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -495,6 +495,10 @@
                 myShipPlacement = [];
                 returnToGameCard.style.display = 'none'; 
                 document.getElementById('players-list-card').style.display = 'block';
+                
+                // Пересоздание досок для очистки меток
+                createBoard(myBoardElement, true, 'placement');
+                createBoard(opponentBoardElement, false, 'attack');
             }
             
             // --- ЛОГИКА ЗАВЕРШЕНИЯ ИГРЫ (СДАЧА) ---
@@ -518,7 +522,7 @@
 
                 if (error) {
                     console.error('Ошибка завершения игры:', error);
-                    alert('Ошибка сервера при завершении игры.');
+                    alert('Ошибка сервера при завершении игры. Проверьте RLS.');
                     return;
                 }
                 
@@ -726,7 +730,6 @@
                     .rpc('create_new_game')
                     .single(); 
                 
-                // **ИСПРАВЛЕНИЕ ОШИБКИ СОЗДАНИЯ ИГРЫ**
                 if (gameError) {
                     console.error('Ошибка создания игры через RPC:', gameError.message);
                     alert('Критическая ошибка создания игры: Проверьте RLS для INSERT на таблице GAMES (функция RPC)');
@@ -770,14 +773,13 @@
             async function joinGame(gameId, challengerUsername) {
                 currentUserData.gameId = gameId;
                 
-                // 1. ПОЛУЧАЕМ ID ИГРОКА 1 (используем maybeSingle для обработки null)
+                // 1. ПОЛУЧАЕМ ID ИГРОКА 1
                 const { data: initialGame, error: selectError } = await supabase
                     .from('games')
                     .select('player1_id')
                     .eq('id', gameId)
                     .maybeSingle();
 
-                // **ИСПРАВЛЕНИЕ ОШИБКИ RLS SELECT/TypeError**
                 if (selectError || initialGame === null) {
                     console.error('Ошибка SELECT при присоединении:', selectError || 'Игра не найдена или RLS SELECT заблокирован.', selectError);
                     currentUserData.gameId = null; 
@@ -798,7 +800,6 @@
                     .eq('id', gameId)
                     .select(); 
 
-                // **ИСПРАВЛЕНИЕ ОШИБКИ RLS UPDATE**
                 if (updateError || !updatedGame || updatedGame.length === 0) {
                     console.error('Ошибка присоединения к игре (UPDATE RLS):', updateError || 'Обновление не вернуло строк.', updateError);
                     currentUserData.gameId = null; // Сбросить gameId, так как присоединение не удалось
@@ -829,19 +830,28 @@
                 createBoard(opponentBoardElement, false, 'attack');
                 document.getElementById('opponent-board-wrapper').style.display = 'none';
 
-                // Если уже есть расстановка, сразу переходим к бою
+                // Определяем текущее состояние расстановки
                 const myBoard = gameData.player1_id === currentUserData.id ? gameData.player1_board : gameData.player2_board;
+                
                 if (myBoard) {
                     myShipPlacement = myBoard.ships;
-                    handleGameUpdate(gameData); // Обновляем UI до актуального состояния
+                    // Если расстановка уже есть, скрываем инструкции
+                    document.getElementById('ship-placement-instructions').style.display = 'none';
+                    document.getElementById('random-placement-button').disabled = true;
+                    // Обновляем UI до актуального состояния
                 } else {
-                    // Стандартный режим расстановки
+                    // Если расстановки нет, показываем инструкции
+                    myShipPlacement = []; // Гарантируем пустоту
                     document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
                     myBoardElement.classList.remove('disabled');
                     document.getElementById('ship-placement-instructions').style.display = 'block';
-                    startBattleButton.onclick = () => finishPlacement(gameData.id);
+                    document.getElementById('random-placement-button').disabled = false;
                     updateShipsRemainingDisplay();
                 }
+                
+                startBattleButton.onclick = () => finishPlacement(gameData.id);
+
+                handleGameUpdate(gameData);
                 
                 setupGameChannel(gameData.id);
             }
@@ -913,7 +923,7 @@
                                 if (mode === 'placement') {
                                     cell.addEventListener('click', handlePlacementClick);
                                 } else if (mode === 'attack') {
-                                    cell.addEventListener('click', handleAttackClick);
+                                    // Обработчик атаки добавляется/удаляется в renderOpponentBoard
                                 }
                             }
                         }
@@ -980,6 +990,8 @@
                 startBattleButton.disabled = true;
                 myBoardElement.classList.add('disabled');
                 document.getElementById('random-placement-button').disabled = true;
+                document.getElementById('ship-placement-instructions').style.display = 'none';
+
                 
                 const fieldToUpdate = currentGameState.player1_id === currentUserData.id ? 'player1_board' : 'player2_board';
                 
@@ -996,6 +1008,7 @@
                 const opponentField = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
 
                 if (opponentField) {
+                    // Если противник уже расставил, меняем статус на in_progress
                     updateObject['status'] = 'in_progress'; 
                 }
 
@@ -1009,8 +1022,8 @@
                     console.error('Ошибка сохранения расстановки:', error);
                     return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова.');
                 }
-
-                document.getElementById('game-status-display').textContent = 'Ожидание, пока соперник расставит корабли...';
+                
+                // UI обновляется через Realtime
             }
 
             // --- ЛОГИКА GAME STATE И REALTIME ---
@@ -1039,27 +1052,10 @@
                 const turnIndicator = document.getElementById('turn-indicator');
                 const opponentBoardWrapper = document.getElementById('opponent-board-wrapper');
                 const myBoardWrapper = document.getElementById('my-board-wrapper');
-
-                if (gameData.status === 'placement') {
-                    if (myBoard) {
-                        document.getElementById('ship-placement-instructions').style.display = 'none';
-                        gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
-                    }
-                    if (!opponentBoard) {
-                        opponentBoardWrapper.style.display = 'none';
-                        return;
-                    }
-                }
                 
-                // Если статус 'in_progress' или 'finished', показываем оба поля
-                if (gameData.status === 'in_progress' || gameData.status === 'finished') {
-                    // Переход в режим боя
-                    document.getElementById('boards-title').textContent = '⚔️ Поле Боя';
-                    document.getElementById('ship-placement-instructions').style.display = 'none';
-                    // Отображение поля противника
-                    opponentBoardWrapper.style.display = 'block';
-                }
-
+                // Убеждаемся, что моя расстановка была сохранена
+                const myShipsPlaced = myBoard && myBoard.ships && myBoard.ships.length === TOTAL_SHIP_CELLS;
+                
                 // --- УСЛОВИЕ ПОБЕДЫ/ПОРАЖЕНИЯ ---
                 const isGameOver = checkWinCondition(opponentBoard);
                 if (isGameOver && gameData.status !== 'finished') {
@@ -1069,39 +1065,69 @@
                     
                     // Отправляем финальное обновление статуса
                     await supabase.from('games').update({ status: 'finished', winner_id: winnerId }).eq('id', currentGameState.id);
-                    gameStatusDisplay.textContent = `🎉 ВЫ ПОБЕДИЛИ!`;
-                    turnIndicator.textContent = 'Игра окончена.';
-                    renderMyBoard(myBoard);
-                    renderOpponentBoard(opponentBoard);
-                    return alert('Поздравляем! Вы потопили все корабли противника!');
+                    // UI обновится через Realtime с новым статусом
+                    return; 
                 } else if (gameData.status === 'finished') {
                     // Игра уже завершена (кто-то сдался или победил)
                     gameStatusDisplay.textContent = gameData.winner_id === currentUserData.id ? `🎉 ВЫ ПОБЕДИЛИ!` : `😭 Вы проиграли.`;
                     turnIndicator.textContent = 'Игра окончена.';
-                    // Делаем кнопки завершения неактивными
                     endGameButton.disabled = true;
-                    // Отображаем финальное состояние
                     renderMyBoard(myBoard);
                     renderOpponentBoard(opponentBoard);
+                    opponentBoardWrapper.classList.remove('turn-highlight');
+                    myBoardWrapper.classList.remove('turn-highlight');
                     return;
                 }
                 // --- КОНЕЦ УСЛОВИЯ ПОБЕДЫ/ПОРАЖЕНИЯ ---
 
-                // Логика хода
-                isMyTurn = gameData.current_turn === currentUserData.id;
+
+                // --- 💥 КРИТИЧЕСКИЙ БЛОК: Управление Статусами ---
                 
-                myBoardWrapper.classList.toggle('turn-highlight', !isMyTurn);
-                opponentBoardWrapper.classList.toggle('turn-highlight', isMyTurn);
-                turnIndicator.innerHTML = isMyTurn 
-                    ? '<span style="color:var(--success);">✅ ВАШ ХОД! Атакуйте!</span>' 
-                    : '<span style="color:var(--danger);">⏳ ХОД ПРОТИВНИКА. Ожидайте...</span>';
+                if (gameData.status === 'placement') {
+                    if (myShipsPlaced) {
+                        // Я расставил корабли, жду противника
+                        document.getElementById('ship-placement-instructions').style.display = 'none';
+                        gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
+                        document.getElementById('opponent-board-wrapper').style.display = 'none';
+                        document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
+                        myBoardElement.classList.add('disabled');
+                    } else {
+                        // Я еще не расставил
+                        document.getElementById('ship-placement-instructions').style.display = 'block';
+                        gameStatusDisplay.textContent = 'Расставляйте свои корабли.';
+                        document.getElementById('opponent-board-wrapper').style.display = 'none';
+                        document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
+                        myBoardElement.classList.remove('disabled');
+                    }
+                    // В режиме placement индикатор хода не нужен
+                    turnIndicator.textContent = ''; 
+                    return;
+                }
+                
+                // 2. Если статус 'in_progress'
+                if (gameData.status === 'in_progress') {
+                    document.getElementById('boards-title').textContent = '⚔️ Поле Боя';
+                    document.getElementById('ship-placement-instructions').style.display = 'none';
+                    opponentBoardWrapper.style.display = 'block'; // Показываем поле противника
+                    myBoardElement.classList.remove('disabled'); // Снимаем блокировку со своего поля
+
+                    // Логика хода
+                    isMyTurn = gameData.current_turn === currentUserData.id;
+                    gameStatusDisplay.textContent = 'Идет бой!';
+                    
+                    myBoardWrapper.classList.toggle('turn-highlight', !isMyTurn);
+                    opponentBoardWrapper.classList.toggle('turn-highlight', isMyTurn);
+                    turnIndicator.innerHTML = isMyTurn 
+                        ? '<span style="color:var(--success);">✅ ВАШ ХОД! Атакуйте!</span>' 
+                        : '<span style="color:var(--danger);">⏳ ХОД ПРОТИВНИКА. Ожидайте...</span>';
+                }
 
                 renderMyBoard(myBoard);
                 renderOpponentBoard(opponentBoard);
             }
             
             function checkWinCondition(opponentBoard) {
-                if (!opponentBoard || !opponentBoard.hits) return false;
+                if (!opponentBoard || !opponentBoard.ships || !opponentBoard.hits) return false;
                 return opponentBoard.hits.length === TOTAL_SHIP_CELLS;
             }
             
@@ -1158,7 +1184,6 @@
 
                 if (error) {
                     console.error('Ошибка при выстреле:', error);
-                    // RLS-политика UPDATE с проверкой current_turn
                     alert('Ошибка сервера при выстреле. Проверьте RLS UPDATE: возможно, выстрел разрешен только current_turn.');
                     opponentBoardElement.classList.remove('disabled'); // Разблокируем в случае ошибки
                 }
@@ -1175,6 +1200,7 @@
                         cell.classList.add('ship');
                     }
                     
+                    // ХИТЫ - ЭТО УДАРЫ ПРОТИВНИКА ПО МОЕМУ ПОЛЮ
                     if (myBoardData && myBoardData.hits.includes(coord)) {
                         cell.classList.add('hit');
                         cell.classList.remove('ship'); // Убираем ship, если попали
@@ -1203,6 +1229,7 @@
                     }
 
 
+                    // ХИТЫ - ЭТО МОИ УДАРЫ ПО ПОЛЮ ПРОТИВНИКА
                     if (opponentBoardData && opponentBoardData.hits.includes(coord)) {
                         cell.classList.add('hit');
                     }
@@ -1258,8 +1285,8 @@
                         startGame(activeGame, opponentName);
                     } else {
                         // Если просто проверка после входа (clicked=false)
-                        // Показываем кнопку возврата, если мы НЕ в режиме игры
-                        if (boardsContainer.style.display === 'none' && activeGame.status !== 'finished') {
+                        if (activeGame.status !== 'finished') {
+                           // Показываем кнопку возврата, если мы НЕ в режиме игры
                            returnToGameCard.style.display = 'block'; // ПОКАЗЫВАЕМ КАРТОЧКУ
                            document.getElementById('players-list-card').style.display = 'block';
                         }
