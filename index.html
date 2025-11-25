@@ -1,266 +1,432 @@
-// --- КОНФИГУРАЦИЯ SUPABASE ---
-const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; // <--- ЗАМЕНИТЕ НА ВАШ URL
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTITh7091kyxFFh8LL7ZAY'; // <--- ЗАМЕНИТЕ НА ВАШ ANON KEY
-
-// --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
-let supabase = null;
-let presenceChannel = null;
-let gameChannel = null;
-
-// Игровая логика будет использовать эти данные
-let currentUserData = { id: null, username: null, gameId: null };
-let currentGameState = null;
-
-// --- ИНИЦИАЛИЗАЦИЯ И ОБРАБОТКА ---
-try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    document.getElementById('auth-message').textContent = 'Библиотека Supabase загружена.';
-    // Запускаем проверку статуса, которая находится в game.js
-    window.addEventListener('load', () => checkAuthStatus());
-} catch (e) {
-    console.error("Ошибка инициализации Supabase:", e);
-    document.getElementById('auth-message').textContent = 'Критическая ошибка: Не удалось инициализировать Supabase.';
-    document.getElementById('auth-message').className = 'error-message';
-}
-
-// --- ФУНКЦИИ АУТЕНТИФИКАЦИИ ---
-
-async function handleAuth(type) {
-    const usernameInput = document.getElementById('username');
-    const passwordInput = document.getElementById('password');
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
-    const authMessage = document.getElementById('auth-message');
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌊 Морской Бой</title>
     
-    if (!username || !password) return displayAuthMessage('Введите имя и пароль.', false);
-
-    const email = username.toLowerCase() + '@battleship.local';
-    
-    let authResult;
-    if (type === 'signin') {
-        authResult = await supabase.auth.signInWithPassword({ email, password });
-    } else {
-        authResult = await supabase.auth.signUp({ 
-            email, 
-            password,
-            options: { data: { username: username } }
-        });
-    }
-    
-    const { data, error: authError } = authResult;
-
-    if (authError) {
-        let msg = authError.message.includes('already registered') ? 'Ошибка: Этот ник уже занят.' : `Ошибка ${type}. Проверьте настройки Supabase.`;
-        displayAuthMessage(msg, false);
-        return;
-    }
-    
-    const user = data.user;
-    if (!user) {
-        displayAuthMessage('Регистрация прошла, но не удалось войти. Попробуйте Войти.', false);
-        return;
-    }
-    
-    if (type === 'signup') {
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert({ id: user.id, username: username });
-        if (profileError) {
-            displayAuthMessage('Ошибка сохранения профиля. Проверьте RLS на таблице PROFILES.', false);
-            return;
+    <style>
+        /* --- ЦВЕТА И ПЕРЕМЕННЫЕ --- */
+        :root {
+            --primary-dark: #1a1a2e; /* Глубокий синий/черный */
+            --secondary-dark: #2a2a4a;
+            --ocean-blue: #0077b6; /* Основной цвет моря */
+            --ship-color: #bbbfc4; /* Светло-серый корабль */
+            --hit-color: #d90000; /* Красное попадание */
+            --miss-color: #03045e; /* Темно-синий промах */
+            --last-hit-color: #00a84f; /* Зеленое последнее попадание */
+            --light-text: #e6e6e6;
+            --border-glow: rgba(0, 119, 182, 0.7);
+            --shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.5);
+            --shadow-inset: inset 0 0 10px rgba(0, 0, 0, 0.3);
         }
-    }
 
-    currentUserData.id = user.id;
-    currentUserData.username = username;
-    usernameInput.value = '';
-    passwordInput.value = '';
-    
-    setupPresence(user.id, username);
-    updateUI(user, username);
-    displayAuthMessage(`Добро пожаловать, ${username}! Вход выполнен.`, true);
-    checkAndResumeGame(false); 
-}
-
-async function checkAuthStatus() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-        // Загружаем имя пользователя из профиля
-        const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', user.id)
-            .single();
-
-        if (profile) {
-            currentUserData.id = user.id;
-            currentUserData.username = profile.username;
-            updateUI(user, profile.username);
-            setupPresence(user.id, profile.username);
-            checkAndResumeGame(false);
-        } else {
-            // Если профиль не найден, возможно, ошибка RLS или регистрация не завершена
-            await supabase.auth.signOut();
-            displayAuthMessage('Не удалось загрузить профиль. Выполните вход.', false);
+        /* --- БАЗОВЫЕ СТИЛИ И ФОН --- */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #0d0d1a 100%);
+            color: var(--light-text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
         }
-    } else {
-        document.getElementById('auth-section').style.display = 'block';
-        document.getElementById('game-section').style.display = 'none';
-        document.getElementById('auth-message').textContent = 'Пожалуйста, войдите или зарегистрируйтесь.';
-    }
-}
 
-async function cleanUpSession() {
-    if (gameChannel) {
-        supabase.removeChannel(gameChannel);
-        gameChannel = null;
-    }
-    if (presenceChannel) {
-        try {
-            await presenceChannel.untrack();
-            supabase.removeChannel(presenceChannel);
-        } catch (e) { /* ignore */ }
-        presenceChannel = null;
-    }
-    // Сброс UI и данных (будет сделано в game.js)
-    window.resetGameUI(); 
-    currentUserData.gameId = null;
-}
-
-
-// --- ФУНКЦИИ ПРИСУТСТВИЯ (LOBBY) ---
-
-function setupPresence(userId, username) {
-    if (presenceChannel) supabase.removeChannel(presenceChannel);
-
-    presenceChannel = supabase.channel('online-players', {
-        config: { presence: { key: userId } }
-    });
-
-    presenceChannel.on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
-        displayOnlinePlayers(state, userId);
-    });
-    
-    presenceChannel.on('broadcast', { event: 'challenge' }, (payload) => {
-        handleIncomingChallenge(payload.payload);
-    });
-
-    presenceChannel
-        .subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-                const activeGame = await getActiveGame();
-                const gameId = activeGame ? activeGame.id : null;
-                await presenceChannel.track({ user_id: userId, username: username, gameId: gameId }); 
-            }
-        });
-}
-
-async function sendChallenge(opponentId, opponentUsername) {
-    const { data: game, error } = await supabase
-        .from('games')
-        .insert([{ 
-            player1_id: currentUserData.id, 
-            player1_name: currentUserData.username,
-            player2_id: opponentId, 
-            player2_name: opponentUsername,
-            status: 'placement' 
-        }])
-        .select()
-        .single();
-    
-    if (error) {
-        alert('Ошибка при создании игры. Проверьте RLS INSERT: ' + error.message);
-        return;
-    }
-    
-    // Обновляем статус присутствия и запускаем игру
-    await presenceChannel.track({ user_id: currentUserData.id, username: currentUserData.username, gameId: game.id }); 
-    window.startGame(game, opponentUsername); 
-
-    // Отправляем уведомление противнику
-    await presenceChannel.send({
-        type: 'broadcast',
-        event: 'challenge',
-        payload: { 
-            gameId: game.id, 
-            challengerId: currentUserData.id, 
-            challengerName: currentUserData.username 
+        header {
+            background: rgba(0, 0, 0, 0.3);
+            width: 100%;
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
+            z-index: 10;
         }
-    });
-}
 
-async function joinGame(gameId, challengerName) {
-    const { data: game, error } = await supabase
-        .from('games')
-        .select()
-        .eq('id', gameId)
-        .single();
-
-    if (error || !game) {
-        alert('Ошибка: Не удалось найти игру. ' + (error ? error.message : ''));
-        return;
-    }
-    
-    // Обновляем статус присутствия и запускаем игру
-    await presenceChannel.track({ user_id: currentUserData.id, username: currentUserData.username, gameId: game.id });
-    window.startGame(game, challengerName);
-}
-
-// --- ФУНКЦИИ REALTIME ИГРЫ ---
-
-function setupGameChannel(gameId) {
-    if (gameChannel) supabase.removeChannel(gameChannel);
-
-    gameChannel = supabase.channel(`game-${gameId}`);
-    
-    gameChannel.on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'games', 
-        filter: `id=eq.${gameId}` 
-    }, (payload) => {
-        console.log('Realtime Game Update:', payload.new);
-        window.handleGameUpdate(payload.new);
-    });
-    
-    gameChannel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-            // Если игрок подключился, отправляем начальное состояние
-            gameChannel.send({ type: 'broadcast', event: 'game_ready' });
+        h1 {
+            color: white;
+            text-shadow: 0 0 10px var(--ocean-blue);
         }
-    });
-}
 
+        main {
+            width: 100%;
+            max-width: 1300px;
+            padding: 0 20px 50px;
+            z-index: 5;
+        }
 
-async function getActiveGame() {
-    const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .or(`player1_id.eq.${currentUserData.id},player2_id.eq.${currentUserData.id}`)
-        .not('status', 'eq', 'finished')
-        .limit(1);
+        /* --- КАРТОЧКИ --- */
+        .card {
+            background: var(--secondary-dark);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: var(--shadow-lift);
+            margin-bottom: 25px;
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+        }
 
-    if (error) {
-        console.error('Ошибка проверки активной игры (RLS SELECT):', error);
-        return null;
-    }
-    return data.length > 0 ? data[0] : null;
-}
+        /* --- ФОРМЫ И КНОПКИ --- */
+        input[type="text"], input[type="password"] {
+            padding: 14px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid var(--ocean-blue);
+            background-color: var(--primary-dark);
+            color: var(--light-text);
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
 
-// --- ЭКСПОРТ ДЛЯ GAME.JS (ПЕРЕМЕННЫЕ) ---
-window.supabase = supabase;
-window.currentUserData = currentUserData;
-window.currentGameState = currentGameState;
-window.presenceChannel = presenceChannel;
-// --- ЭКСПОРТ ДЛЯ GAME.JS (ФУНКЦИИ) ---
-window.handleAuth = handleAuth;
-window.checkAuthStatus = checkAuthStatus;
-window.cleanUpSession = cleanUpSession;
-window.sendChallenge = sendChallenge;
-window.joinGame = joinGame;
-window.setupGameChannel = setupGameChannel;
-window.getActiveGame = getActiveGame;
-window.displayAuthMessage = displayAuthMessage;
-window.updateUI = updateUI;
-window.setupPresence = setupPresence;
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: var(--last-hit-color);
+            box-shadow: 0 0 10px var(--last-hit-color);
+            outline: none;
+        }
+
+        button {
+            background: linear-gradient(90deg, var(--ocean-blue) 0%, #00a84f 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s, transform 0.1s, box-shadow 0.3s;
+            padding: 14px;
+            border-radius: 8px;
+        }
+
+        button:hover:not(:disabled) {
+            background: linear-gradient(90deg, #0093d9 0%, #00b957 100%);
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        button:disabled {
+            background: #444466;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        /* --- СЕКЦИИ --- */
+        #auth-section {
+            width: 100%;
+            max-width: 400px;
+            margin: 50px auto;
+        }
+        
+        #user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logout-button {
+            background: var(--hit-color);
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+
+        .challenge-button {
+            background: var(--ocean-blue);
+            padding: 8px 15px;
+            width: auto;
+            font-size: 14px;
+        }
+
+        /* --- ИГРОВЫЕ ПОЛЯ И РАССТАНОВКА --- */
+        .boards-and-ships {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .board-wrapper {
+            flex-grow: 1;
+            text-align: center;
+        }
+        
+        .battleship-board {
+            display: grid;
+            grid-template-columns: repeat(11, 35px);
+            grid-template-rows: repeat(11, 35px);
+            border: 3px solid var(--ocean-blue);
+            margin: 15px auto 0;
+            width: fit-content;
+            box-shadow: 0 0 20px var(--border-glow);
+            background: var(--secondary-dark);
+            border-radius: 5px;
+        }
+
+        .cell {
+            width: 35px;
+            height: 35px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: transparent;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-sizing: border-box;
+        }
+        
+        .coord {
+            background-color: rgba(0, 0, 0, 0.4);
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            user-select: none;
+        }
+        
+        /* ЭФФЕКТ ХОДА */
+        .turn-highlight {
+            border: 3px solid var(--last-hit-color) !important;
+            box-shadow: 0 0 30px var(--last-hit-color);
+            animation: pulse-glow 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            from { box-shadow: 0 0 20px var(--last-hit-color); }
+            to { box-shadow: 0 0 40px var(--last-hit-color); }
+        }
+
+        /* --- СТАТУСЫ КЛЕТОК --- */
+        .hit, .miss, .last-bomb {
+            background-color: transparent !important; 
+        }
+
+        .hit::before, .miss::before, .last-bomb::before {
+            content: '';
+            position: absolute;
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            display: block;
+            opacity: 0.9;
+            box-shadow: var(--shadow-inset);
+            animation: hit-reveal 0.3s ease-out;
+        }
+        
+        @keyframes hit-reveal {
+            from { opacity: 0; transform: scale(0.5); }
+            to { opacity: 0.9; transform: scale(1.0); }
+        }
+        
+        .miss::before {
+            background-color: var(--miss-color);
+            border: 2px solid #5a5d85;
+        }
+        
+        .hit::before {
+            background-color: var(--hit-color);
+            border: 2px solid #ff4444;
+        }
+
+        /* Последняя бомба - это метка поверх hit/miss */
+        .last-bomb::after {
+            content: '🔥'; /* Эффект */
+            position: absolute;
+            font-size: 20px;
+            animation: bomb-flash 1s infinite alternate;
+        }
+
+        .last-bomb.hit::before {
+            background-color: var(--last-hit-color); /* Зеленый цвет для последнего попадания */
+            border: 2px solid #50ff9c;
+        }
+        
+        @keyframes bomb-flash {
+            from { transform: scale(1.0); opacity: 1; }
+            to { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        /* Атака курсором */
+        .attack-mode .cell:hover:not(.coord):not(.hit):not(.miss):not(.disabled) {
+            background-color: rgba(255, 255, 255, 0.15);
+            cursor: crosshair;
+        }
+
+        /* --- DRAG & DROP КОРАБЛИ (PLACEMENT) --- */
+        #ship-list-container {
+            width: 300px;
+            min-height: 200px;
+            padding: 20px;
+            background: var(--secondary-dark);
+            border-radius: 10px;
+            box-shadow: var(--shadow-lift);
+        }
+
+        #ship-list {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .draggable-ship-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+        }
+
+        .draggable-ship {
+            display: flex;
+            cursor: grab;
+            transition: opacity 0.3s;
+            border-radius: 4px;
+        }
+
+        .draggable-ship.is-dragging {
+            opacity: 0.5;
+            z-index: 1000;
+        }
+
+        .ship-part {
+            width: 30px;
+            height: 30px;
+            background-color: var(--ship-color);
+            border: 1px solid var(--secondary-dark);
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        .rotated {
+            flex-direction: column;
+        }
+        
+        .ship-placed {
+            display: none; /* Скрываем из списка, когда размещен */
+        }
+
+        /* --- КАРТИНКА КОРАБЛЯ НА ДОСКЕ --- */
+        .ship-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--ship-color);
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+            z-index: 5;
+            pointer-events: none;
+            border: 1px solid var(--secondary-dark);
+        }
+        
+        .ship-overlay-valid {
+             background-color: rgba(0, 255, 0, 0.3) !important; /* Зеленый превью */
+        }
+        .ship-overlay-invalid {
+            background-color: rgba(255, 0, 0, 0.3) !important; /* Красный превью */
+        }
+        
+        /* --- УПРАВЛЕНИЕ РАССТАНОВКОЙ --- */
+        #placement-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .placement-info {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: var(--ocean-blue);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🌊 Морской Бой</h1>
+        <p>Мультиплеер на Supabase Realtime</p>
+    </header>
+
+    <main>
+        <section id="auth-section" class="card">
+            <h2>🔑 Вход / Регистрация</h2>
+            <form id="auth-form">
+                <input type="text" id="username" placeholder="Введите ваше имя" required>
+                <input type="password" id="password" placeholder="Пароль (для защиты ника)" required>
+                <div class="auth-buttons">
+                    <button type="button" id="signin-button">Войти</button>
+                    <button type="button" id="signup-button">Зарегистрироваться</button>
+                </div>
+                <p id="auth-message">Инициализация...</p>
+            </form>
+        </section>
+
+        <section id="game-section" style="display: none;">
+            <div id="user-info" class="card">
+                <div>
+                    <h3>Добро пожаловать, <span id="current-username"></span>!</h3>
+                    <p>Ваш ID: <span id="current-user-id"></span></p>
+                </div>
+                <button id="logout-button" class="logout-button">Выйти</button>
+            </div>
+            
+            <div id="return-to-game-card" class="card" style="display: none;">
+                <h3>🏃‍♂️ Вы в активной игре</h3>
+                <p>Ваша предыдущая игра не завершена. Вернуться и закончить?</p>
+                <button id="return-to-game-button" class="challenge-button">Вернуться в игру</button>
+            </div>
+            
+            <div id="players-list-card" class="card">
+                <h2>👥 Игроки Онлайн</h2>
+                <ul id="online-players-list"></ul>
+            </div>
+            
+            <div id="active-game-info" class="card" style="display: none;">
+                <h3>🎮 Активная игра</h3>
+                <p>ID комнаты: <strong id="game-id-display"></strong> | Соперник: <strong id="opponent-name-display"></strong></p>
+                <p>Статус: <strong id="game-status-display">Ожидание...</strong>
+                <button id="end-game-button" class="logout-button">Сдаться и завершить игру</button></p> 
+                <p id="turn-indicator"></p>
+            </div>
+
+            <div id="boards-container" style="display: none;" class="card">
+                <h2 id="boards-title">🛥️ Расстановка кораблей</h2>
+                <div class="boards-and-ships">
+                    
+                    <div id="placement-tools" style="display: none;">
+                        <div id="ship-list-container">
+                            <p class="placement-info">Перетащите корабли на поле:</p>
+                            <ul id="ship-list">
+                                </ul>
+                        </div>
+                        <div id="placement-controls">
+                            <button type="button" id="random-placement-button">Рандомная расстановка</button>
+                            <button type="button" id="start-battle-button" disabled>ГОТОВ! 🚢</button>
+                        </div>
+                    </div>
+                    
+                    <div id="my-board-wrapper" class="board-wrapper">
+                        <h3>Ваше поле</h3>
+                        <div id="my-board" class="battleship-board"></div>
+                    </div>
+
+                    <div id="opponent-board-wrapper" class="board-wrapper" style="display: none;">
+                        <h3>Поле противника</h3>
+                        <div id="opponent-board" class="battleship-board"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
