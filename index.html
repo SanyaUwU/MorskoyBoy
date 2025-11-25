@@ -1013,6 +1013,13 @@
                     // Статус меняется на 'in_progress', как только последний игрок сохранит расстановку
                     updateObject['status'] = 'in_progress'; 
                 }
+                
+                // --- ДИАГНОСТИКА: ПРОВЕРКА ОТПРАВЛЯЕМОГО ОБЪЕКТА ---
+                console.log('--- finishPlacement DEBUG ---');
+                console.log('Состояние игры:', currentGameState);
+                console.log('Объект обновления:', updateObject);
+                console.log('Является ли поле противника заполненным:', !!opponentBoard);
+                // --- КОНЕЦ ДИАГНОСТИКИ ---
 
                 const { error } = await supabase
                     .from('games')
@@ -1020,10 +1027,12 @@
                     .eq('id', gameId);
 
                 if (error) {
-                    console.error('Ошибка сохранения расстановки:', error);
-                    return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова.');
+                    console.error('Ошибка сохранения расстановки (Supabase Error):', error);
+                    return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова. КОД ОШИБКИ: ' + error.message);
                 }
                 
+                console.log('Обновление успешно отправлено. Ожидаем Realtime.');
+
                 // UI обновляется через Realtime
             }
 
