@@ -1,7 +1,7 @@
 // --- КОНФИГУРАЦИЯ SUPABASE ---
 // !!! ЗАМЕНИТЕ ЭТИ ЗНАЧЕНИЯ НА ВАШИ АКТУАЛЬНЫЕ КЛЮЧИ !!!
 const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTITh7091kyxFFh8LL7ZAY';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlFPNITh7091kyxFFh8LL7ZAY';
 // !!! НЕ ЗАБУДЬТЕ ЗАМЕНИТЬ !!!
 
 // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
