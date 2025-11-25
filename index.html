@@ -21,7 +21,8 @@
             --shadow-inset: inset 0 0 10px rgba(0, 0, 0, 0.3);
         }
 
-        /* --- БАЗОВЫЕ СТИЛИ И ФОН --- */
+        /* --- АНИМАЦИЯ ФОНА (ЧАСТИЦЫ) --- */
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, var(--primary-dark) 0%, #0d0d1a 100%);
@@ -36,6 +37,56 @@
             overflow-x: hidden;
         }
 
+        /* Контейнер для частиц */
+        .ocean-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1; /* Под основным контентом */
+            overflow: hidden;
+        }
+
+        /* Генератор частиц */
+        .ocean-particles div {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.05); /* Едва заметные белые частицы */
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            animation: move-particles linear infinite;
+        }
+
+        /* Анимация движения частиц */
+        @keyframes move-particles {
+            0% { transform: translate(0, 0) scale(1); opacity: 0; }
+            5% { opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0.5); opacity: 0; }
+        }
+
+        /* Устанавливаем случайные начальные позиции и векторы движения */
+        
+        .ocean-particles div:nth-child(1) { top: 10%; left: 20%; animation-duration: 15s; --dx: 150px; --dy: 300px; }
+        .ocean-particles div:nth-child(2) { top: 80%; left: 5%; animation-duration: 18s; --dx: 200px; --dy: -400px; }
+        .ocean-particles div:nth-child(3) { top: 50%; left: 70%; animation-duration: 12s; --dx: -100px; --dy: 250px; }
+        .ocean-particles div:nth-child(4) { top: 30%; left: 90%; animation-duration: 20s; --dx: -300px; --dy: 50px; }
+        .ocean-particles div:nth-child(5) { top: 65%; left: 45%; animation-duration: 10s; --dx: 100px; --dy: -100px; }
+        .ocean-particles div:nth-child(6) { top: 5%; left: 55%; animation-duration: 16s; --dx: -250px; --dy: 350px; }
+        .ocean-particles div:nth-child(7) { top: 90%; left: 80%; animation-duration: 14s; --dx: 50px; --dy: -300px; }
+        .ocean-particles div:nth-child(8) { top: 40%; left: 10%; animation-duration: 19s; --dx: 200px; --dy: 200px; }
+        .ocean-particles div:nth-child(9) { top: 75%; left: 30%; animation-duration: 11s; --dx: -150px; --dy: -200px; }
+        .ocean-particles div:nth-child(10) { top: 20%; left: 40%; animation-duration: 13s; --dx: 300px; --dy: -50px; }
+        /* Добавлено больше синих "пузырьков" */
+        .ocean-particles div:nth-child(11) { top: 30%; left: 60%; animation-duration: 17s; --dx: -100px; --dy: 200px; background: rgba(0, 119, 182, 0.1); width: 5px; height: 5px; }
+        .ocean-particles div:nth-child(12) { top: 70%; left: 15%; animation-duration: 22s; --dx: 150px; --dy: -300px; background: rgba(0, 119, 182, 0.15); width: 4px; height: 4px; }
+        .ocean-particles div:nth-child(13) { top: 45%; left: 85%; animation-duration: 14s; --dx: -200px; --dy: 100px; background: rgba(255, 255, 255, 0.08); width: 2px; height: 2px; }
+        .ocean-particles div:nth-child(14) { top: 5%; left: 5%; animation-duration: 25s; --dx: 50px; --dy: 500px; background: rgba(0, 119, 182, 0.1); width: 3px; height: 3px; }
+        .ocean-particles div:nth-child(15) { top: 95%; left: 50%; animation-duration: 10s; --dx: 100px; --dy: -50px; background: rgba(255, 255, 255, 0.03); width: 6px; height: 6px; }
+
+        /* --- БАЗОВЫЕ СТИЛИ И ФОН --- */
+        
         header {
             background: rgba(0, 0, 0, 0.3);
             width: 100%;
@@ -55,7 +106,7 @@
             width: 100%;
             max-width: 1300px;
             padding: 0 20px 50px;
-            z-index: 5;
+            z-index: 5; /* Контент должен быть над частицами */
         }
 
         /* --- КАРТОЧКИ --- */
@@ -347,6 +398,12 @@
     </style>
 </head>
 <body>
+    <div class="ocean-particles">
+        <div></div><div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div><div></div>
+    </div>
+
     <header>
         <h1>🌊 Морской Бой</h1>
         <p>Мультиплеер на Supabase Realtime</p>
