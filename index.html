@@ -358,10 +358,9 @@
 
     </main>
     
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script type="module">
-        // 1. ИМПОРТ ИНСТРУМЕНТА СОЗДАНИЯ КЛИЕНТА
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-        
         // ИНФОРМАЦИЯ О SUPABASE
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
         // ВАШ РАБОЧИЙ ANON KEY
@@ -372,8 +371,8 @@
         
         // --- ГАРАНТИРУЕМ ИНИЦИАЛИЗАЦИЮ ---
         try {
-            // Инициализация Supabase клиента сразу после импорта
-            supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            // Инициализация теперь использует глобальный объект 'window.supabase'
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             authMessage.textContent = 'Библиотека Supabase загружена. Инициализация игры...';
             // Запуск основной логики после успешной инициализации
             startMorskoyBoy(); 
@@ -405,7 +404,6 @@
 
             let presenceChannel = null;
             let gameChannel = null;
-            // Убедимся, что currentUserData.id имеет значение при вызове sendChallenge
             let currentUserData = { id: null, username: null, gameId: null }; 
             let currentGameState = null;
             
@@ -468,6 +466,7 @@
                 displayAuthMessage(`Добро пожаловать, ${username}! Вход выполнен.`, true);
             });
 
+            // УСИЛЕННАЯ ЛОГИКА РЕГИСТРАЦИИ (ИСПРАВЛЕНИЕ ПРОБЛЕМЫ ПРОФИЛЯ)
             signupButton.addEventListener('click', async () => {
                 if (!supabase) return displayAuthMessage('Идет загрузка... Попробуйте через секунду.', false);
 
@@ -495,7 +494,7 @@
                     return;
                 }
                 
-                // ШАГ 2: Получаем текущего пользователя (чтобы гарантировать наличие актуального токена)
+                // ШАГ 2: Получаем текущего пользователя (для гарантии наличия актуального токена)
                 const { data: { user }, error: userError } = await supabase.auth.getUser();
 
                 if (userError || !user) {
@@ -504,7 +503,7 @@
                      return;
                 }
                 
-                // ШАГ 3: Создаем запись в таблице profiles (требует RLS на profiles)
+                // ШАГ 3: Создаем запись в таблице profiles (требует правильного RLS)
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .upsert({ 
