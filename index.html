@@ -25,7 +25,8 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--primary-dark) 0%, #0d0d1a 100%);
+            /* Возвращаем черно-синий градиент */
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #0d0d1a 100%); 
             color: var(--light-text);
             margin: 0;
             padding: 0;
@@ -78,7 +79,6 @@
         .ocean-particles div:nth-child(8) { top: 40%; left: 10%; animation-duration: 19s; --dx: 200px; --dy: 200px; }
         .ocean-particles div:nth-child(9) { top: 75%; left: 30%; animation-duration: 11s; --dx: -150px; --dy: -200px; }
         .ocean-particles div:nth-child(10) { top: 20%; left: 40%; animation-duration: 13s; --dx: 300px; --dy: -50px; }
-        /* Добавлено больше синих "пузырьков" */
         .ocean-particles div:nth-child(11) { top: 30%; left: 60%; animation-duration: 17s; --dx: -100px; --dy: 200px; background: rgba(0, 119, 182, 0.1); width: 5px; height: 5px; }
         .ocean-particles div:nth-child(12) { top: 70%; left: 15%; animation-duration: 22s; --dx: 150px; --dy: -300px; background: rgba(0, 119, 182, 0.15); width: 4px; height: 4px; }
         .ocean-particles div:nth-child(13) { top: 45%; left: 85%; animation-duration: 14s; --dx: -200px; --dy: 100px; background: rgba(255, 255, 255, 0.08); width: 2px; height: 2px; }
@@ -193,6 +193,14 @@
             width: auto;
             font-size: 14px;
         }
+
+        /* Кнопка "ВЕРНУТЬСЯ В ЛОББИ" после игры */
+        .lobby-button {
+            background: #4CAF50; /* Зеленый */
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+
 
         /* --- ИГРОВЫЕ ПОЛЯ И РАССТАНОВКА --- */
         .boards-and-ships {
@@ -395,6 +403,15 @@
             font-weight: bold;
             color: var(--ocean-blue);
         }
+
+        /* Секция финиша */
+        #game-finish-card {
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            margin: 50px auto;
+            padding: 40px;
+        }
     </style>
 </head>
 <body>
@@ -478,6 +495,12 @@
                     </div>
                 </div>
             </div>
+
+            <div id="game-finish-card" class="card" style="display: none;">
+                <h2 id="finish-message"></h2>
+                <button id="back-to-lobby-button" class="lobby-button">↩️ Вернуться в лобби</button>
+            </div>
+
         </section>
 
     </main>
