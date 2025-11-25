@@ -376,7 +376,7 @@
                     <p>Расставьте свои корабли. Поставлено <b>0</b> из <b>20</b> клеток.</p>
                     <div class="placement-buttons">
                         <button type="button" id="random-placement-button">Рандомно</button>
-                        <button type="button" id="start-battle-button" disabled>Начать Бой!</button>
+                        <button type="button" id="start-battle-button" disabled>ГОТОВ! 🚢</button>
                     </div>
                 </div>
 
@@ -1004,14 +1004,15 @@
                 const updateObject = {};
                 updateObject[fieldToUpdate] = boardData;
                 
-                // Проверяем, есть ли данные у обоих игроков
-                const opponentField = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
+                // КРИТИЧЕСКАЯ ПРОВЕРКА: Получаем текущее состояние противника
+                const opponentBoard = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
 
-                if (opponentField) {
-                    // Если противник уже расставил, меняем статус на in_progress
+                // Если противник УЖЕ расставил корабли (т.е. его поле не null), 
+                // ИЛИ если текущий игрок - это Игрок 2 (чей ход меняет статус) и у Игрока 1 уже есть расстановка
+                if (opponentBoard || (currentGameState.player2_id === currentUserData.id && currentGameState.player1_board)) {
+                    // Статус меняется на 'in_progress', как только последний игрок сохранит расстановку
                     updateObject['status'] = 'in_progress'; 
                 }
-
 
                 const { error } = await supabase
                     .from('games')
@@ -1091,6 +1092,15 @@
                         document.getElementById('opponent-board-wrapper').style.display = 'none';
                         document.getElementById('boards-title').textContent = '🛥️ Расстановка кораблей';
                         myBoardElement.classList.add('disabled');
+                        
+                        // Если статус 'placement', но противник уже сохранил, 
+                        // и его расстановка пришла нам по Realtime, но статус игры еще не сменился:
+                        if (opponentBoard && opponentBoard.ships && opponentBoard.ships.length === 20) {
+                            // Этой ситуации в идеале не должно быть, т.к. игрок, который сохраняет последним, 
+                            // должен сменить статус на 'in_progress'. 
+                            gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
+                        }
+                        
                     } else {
                         // Я еще не расставил
                         document.getElementById('ship-placement-instructions').style.display = 'block';
@@ -1101,7 +1111,7 @@
                     }
                     // В режиме placement индикатор хода не нужен
                     turnIndicator.textContent = ''; 
-                    return;
+                    return; // ВАЖНО: Выходим, если статус 'placement'
                 }
                 
                 // 2. Если статус 'in_progress'
