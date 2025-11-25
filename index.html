@@ -522,7 +522,7 @@
 
                 if (error) {
                     console.error('Ошибка завершения игры:', error);
-                    alert('Ошибка сервера при завершении игры. Проверьте RLS.');
+                    alert('Ошибка сервера при завершении игры. Проверьте RLS. КОД ОШИБКИ: ' + error.message);
                     return;
                 }
                 
@@ -1007,9 +1007,9 @@
                 // КРИТИЧЕСКАЯ ПРОВЕРКА: Получаем текущее состояние противника
                 const opponentBoard = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
 
-                // Если противник УЖЕ расставил корабли (т.е. его поле не null), 
-                // ИЛИ если текущий игрок - это Игрок 2 (чей ход меняет статус) и у Игрока 1 уже есть расстановка
-                if (opponentBoard || (currentGameState.player2_id === currentUserData.id && currentGameState.player1_board)) {
+                // ИСПРАВЛЕННОЕ УСЛОВИЕ: Только если противник УЖЕ расставил корабли, меняем статус
+                // Проверяем, что opponentBoard существует, имеет свойство ships и в нем 20 кораблей
+                if (opponentBoard && opponentBoard.ships && opponentBoard.ships.length === TOTAL_SHIP_CELLS) { 
                     // Статус меняется на 'in_progress', как только последний игрок сохранит расстановку
                     updateObject['status'] = 'in_progress'; 
                 }
@@ -1018,7 +1018,7 @@
                 console.log('--- finishPlacement DEBUG ---');
                 console.log('Состояние игры:', currentGameState);
                 console.log('Объект обновления:', updateObject);
-                console.log('Является ли поле противника заполненным:', !!opponentBoard);
+                console.log('Является ли поле противника заполненным:', !!(opponentBoard && opponentBoard.ships && opponentBoard.ships.length === TOTAL_SHIP_CELLS));
                 // --- КОНЕЦ ДИАГНОСТИКИ ---
 
                 const { error } = await supabase
@@ -1028,7 +1028,12 @@
 
                 if (error) {
                     console.error('Ошибка сохранения расстановки (Supabase Error):', error);
-                    return alert('Ошибка сохранения кораблей. Попробуйте выйти и войти снова. КОД ОШИБКИ: ' + error.message);
+                    // Разблокируем кнопки для повторной попытки, если это не RLS-ошибка
+                    startBattleButton.disabled = false;
+                    myBoardElement.classList.remove('disabled');
+                    document.getElementById('random-placement-button').disabled = false;
+                    document.getElementById('ship-placement-instructions').style.display = 'block';
+                    return alert('Ошибка сохранения кораблей. Возможно, проблема с RLS UPDATE. КОД ОШИБКИ: ' + error.message);
                 }
                 
                 console.log('Обновление успешно отправлено. Ожидаем Realtime.');
@@ -1104,10 +1109,9 @@
                         
                         // Если статус 'placement', но противник уже сохранил, 
                         // и его расстановка пришла нам по Realtime, но статус игры еще не сменился:
-                        if (opponentBoard && opponentBoard.ships && opponentBoard.ships.length === 20) {
-                            // Этой ситуации в идеале не должно быть, т.к. игрок, который сохраняет последним, 
-                            // должен сменить статус на 'in_progress'. 
-                            gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли...';
+                        if (opponentBoard && opponentBoard.ships && opponentBoard.ships.length === TOTAL_SHIP_CELLS) {
+                            // Этой ситуации в идеале не должно быть.
+                            gameStatusDisplay.textContent = 'Ожидание, пока соперник расставит корабли... (Противник готов, ожидаем смены статуса)';
                         }
                         
                     } else {
@@ -1158,7 +1162,7 @@
                 const coord = cell.dataset.coord;
 
                 const targetBoard = currentGameState.player1_id === currentUserData.id ? currentGameState.player2_board : currentGameState.player1_board;
-                if (targetBoard.hits.includes(coord) || targetBoard.misses.includes(coord)) {
+                if (targetBoard && (targetBoard.hits.includes(coord) || targetBoard.misses.includes(coord))) {
                     return alert('В эту клетку вы уже стреляли!');
                 }
                 
@@ -1215,17 +1219,17 @@
                     const coord = cell.dataset.coord;
                     cell.classList.remove('ship', 'hit', 'miss');
 
-                    if (myBoardData && myBoardData.ships.includes(coord)) {
+                    if (myBoardData && myBoardData.ships && myBoardData.ships.includes(coord)) {
                         cell.classList.add('ship');
                     }
                     
                     // ХИТЫ - ЭТО УДАРЫ ПРОТИВНИКА ПО МОЕМУ ПОЛЮ
-                    if (myBoardData && myBoardData.hits.includes(coord)) {
+                    if (myBoardData && myBoardData.hits && myBoardData.hits.includes(coord)) {
                         cell.classList.add('hit');
                         cell.classList.remove('ship'); // Убираем ship, если попали
                     }
                     
-                    if (myBoardData && myBoardData.misses.includes(coord)) {
+                    if (myBoardData && myBoardData.misses && myBoardData.misses.includes(coord)) {
                         cell.classList.add('miss');
                     }
                 }
@@ -1249,11 +1253,11 @@
 
 
                     // ХИТЫ - ЭТО МОИ УДАРЫ ПО ПОЛЮ ПРОТИВНИКА
-                    if (opponentBoardData && opponentBoardData.hits.includes(coord)) {
+                    if (opponentBoardData && opponentBoardData.hits && opponentBoardData.hits.includes(coord)) {
                         cell.classList.add('hit');
                     }
                     
-                    if (opponentBoardData && opponentBoardData.misses.includes(coord)) {
+                    if (opponentBoardData && opponentBoardData.misses && opponentBoardData.misses.includes(coord)) {
                         cell.classList.add('miss');
                     }
                     
