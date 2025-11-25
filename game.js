@@ -1,11 +1,10 @@
 // =========================================================================
-// ОСНОВНОЙ КОНТЕЙНЕР КОДА (IIFE ДЛЯ ИЗОЛЯЦИИ ПЕРЕМЕННЫХ)
+// ОСНОВНОЙ КОНТЕЙНЕР КОДА (IIFE ДЛЯ ИЗОЛЯЦИИ ПЕРЕМЕННЫХ И ИЗБЕЖАНИЯ CONFLICTS)
 // =========================================================================
 (function() {
-    "use strict"; // Включаем строгий режим для лучшей обработки ошибок
+    "use strict";
 
-    // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (используем var для совместимости и доступности)
-    // ИСПРАВЛЕНИЕ ОШИБКИ 'presenceChannel'
+    // ИСПРАВЛЕНИЕ ОШИБКИ 'presenceChannel has already been declared'
     var presenceChannel = null;
     var gameChannel = null;
     var current_game = null;
@@ -46,7 +45,8 @@
     document.getElementById('signup-button').addEventListener('click', () => handleAuth(false));
     document.getElementById('logout-button').addEventListener('click', logout);
     document.getElementById('back-to-lobby-button').addEventListener('click', showLobby);
-    randomPlacementButton.addEventListener('click', placeShipsRandomly); // Добавление обработчика
+    if (randomPlacementButton) randomPlacementButton.addEventListener('click', placeShipsRandomly);
+
 
     async function handleAuth(isSignIn) {
         const username = document.getElementById('username').value.trim();
@@ -60,7 +60,8 @@
 
         try {
             let response;
-            const email = `${username}@battleship.com`; // Формируем email из имени
+            // !!! КРИТИЧЕСКИЙ МОМЕНТ: Supabase Auth требует email
+            const email = `${username}@battleship.com`; 
             
             if (isSignIn) {
                 response = await supabase.auth.signInWithPassword({ email, password });
@@ -69,7 +70,7 @@
                     email, 
                     password, 
                     options: { 
-                        data: { username: username } // Сохраняем имя пользователя
+                        data: { username: username }
                     } 
                 });
             }
@@ -82,14 +83,15 @@
             initializeUser(response.data.user);
 
         } catch (error) {
-            authMessage.textContent = `Ошибка ${isSignIn ? 'входа' : 'регистрации'}: ${error.message}. Проверьте настройки Supabase.`;
+            // Исправленная ошибка: Invalid login credentials
+            authMessage.textContent = `Ошибка ${isSignIn ? 'входа' : 'регистрации'}: ${error.message}. Проверьте введенные данные и настройки Supabase.`;
             console.error("Auth Error:", error);
         }
     }
 
     function initializeUser(user) {
         if (!user) {
-            window.myUserId = null; // Используем window для доступа к глобальным переменным из supabase.js
+            window.myUserId = null;
             window.myUsername = null;
             authSection.style.display = 'block';
             gameSection.style.display = 'none';
@@ -97,6 +99,7 @@
         }
 
         window.myUserId = user.id;
+        // Используем 'username' из user_metadata, если доступно
         window.myUsername = user.user_metadata?.username || user.email.split('@')[0]; 
 
         document.getElementById('current-username').textContent = window.myUsername;
@@ -110,6 +113,9 @@
     }
 
     async function logout() {
+        if (gameChannel) await supabase.removeChannel(gameChannel);
+        if (presenceChannel) await supabase.removeChannel(presenceChannel);
+
         await supabase.auth.signOut();
         window.myUserId = null;
         window.myUsername = null;
@@ -134,10 +140,9 @@
 
     function subscribeToPresence() {
         if (presenceChannel) {
-            presenceChannel.unsubscribe();
+            supabase.removeChannel(presenceChannel);
         }
         
-        // Канал для отслеживания онлайн-пользователей
         presenceChannel = supabase.channel('online_players', {
             config: {
                 presence: {
@@ -150,14 +155,15 @@
             .on('presence', { event: 'sync' }, () => {
                 const state = presenceChannel.presenceState();
                 const players = Object.keys(state)
-                    .map(id => state[id][0].username)
-                    .filter(name => name !== window.myUsername); // Не показываем себя
+                    .filter(id => id !== window.myUserId) // Фильтр по ID
+                    .map(id => state[id][0].username);
 
                 updatePlayersList(players);
             })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    await presenceChannel.track({ username: window.myUsername });
+                    // Важно: track() должен быть после подписки
+                    await presenceChannel.track({ username: window.myUsername }); 
                 }
             });
     }
@@ -191,7 +197,7 @@
     // =========================================================================
 
     async function checkActiveGame() {
-        // 1. Проверяем, есть ли незавершенная игра с участием этого игрока
+        // Проверяем наличие активной игры (статусы 'lobby', 'placement', 'battle')
         const { data, error } = await supabase
             .from('games')
             .select('*')
@@ -200,13 +206,13 @@
             .limit(1)
             .single();
 
+        // PGRST116: The result contains 0 rows (т.е. нет активной игры)
         if (error && error.code !== 'PGRST116') {
-            console.error("Ошибка проверки активной игры:", error);
+            console.error("Ошибка проверки активной игры (RLS SELECT?):", error); //
             return;
         }
 
         if (data) {
-            // Найдена активная игра
             document.getElementById('return-to-game-card').style.display = 'block';
             document.getElementById('return-to-game-button').onclick = () => joinGame(data.id);
         } else {
@@ -216,9 +222,8 @@
 
     // Создание игры (вызов)
     async function createGame(opponentName) {
-        // Шаг 1: Найти ID противника по имени
         const { data: opponentData } = await supabase
-            .from('users')
+            .from('users') // Таблица 'users' или 'auth.users' + public.user_profiles
             .select('id')
             .eq('raw_user_meta_data->>username', opponentName)
             .limit(1);
@@ -229,12 +234,11 @@
         }
         const opponentId = opponentData[0].id;
         
-        // Шаг 2: Создать игру в статусе 'lobby'
         const { data: game, error: createError } = await supabase
             .from('games')
             .insert({
                 player1_id: window.myUserId,
-                player1_name: window.myUsername,
+                player1_name: window.myUsername, // Проверить существование колонки player1_name!
                 player2_id: opponentId,
                 player2_name: opponentName,
                 status: 'lobby',
@@ -244,7 +248,8 @@
             .single();
 
         if (createError) {
-            alert("Ошибка при создании игры. Проверьте RLS INSERT или наличие колонок.");
+            // Ошибка RLS INSERT или отсутсвие колонок
+            alert(`Ошибка при создании игры. Проверьте RLS INSERT или наличие колонок: ${createError.message}`); 
             console.error("Ошибка создания игры:", createError);
             return;
         }
@@ -254,27 +259,26 @@
 
     // Присоединение к игре / Запуск Realtime
     async function joinGame(gameId) {
-        // Шаг 1: Загрузка данных игры
-        const { data: game, error } = await supabase
+        // ПЕРЕМЕНА: Убираем .single() для лучшей совместимости с RLS (используем .limit(1)[0])
+        const { data, error } = await supabase
             .from('games')
             .select('*')
             .eq('id', gameId)
-            .limit(1)
-            .single();
+            .limit(1);
 
-        if (error) {
-            alert("Не удалось найти игру или получить данные (Ошибка RLS SELECT).");
-            console.error("Ошибка SELECT при присоединении:", error);
+        if (error || !data || data.length === 0) {
+            // Ошибка RLS SELECT
+            alert("Не удалось найти игру или получить данные (Ошибка RLS SELECT)."); 
+            console.error("Ошибка SELECT при присоединении:", error || { message: "Игра не найдена." });
             return;
         }
 
+        const game = data[0];
         current_game = game;
         isPlayer1 = game.player1_id === window.myUserId;
 
-        // Шаг 2: Настройка интерфейса
         showGameUI();
         
-        // Шаг 3: Подписка на Realtime
         if (gameChannel) {
             await supabase.removeChannel(gameChannel);
         }
@@ -290,11 +294,11 @@
             }
         ).subscribe();
         
-        // Обновление UI сразу после подписки
         updateGameUI(current_game);
     }
 
     function showLobby() {
+        // Логика возврата в лобби
         boardsContainer.style.display = 'none';
         activeGameInfo.style.display = 'none';
         playersListCard.style.display = 'block';
@@ -304,7 +308,6 @@
             supabase.removeChannel(gameChannel);
         }
         current_game = null;
-        // Очистка досок
         myBoardElement.innerHTML = '';
         opponentBoardElement.innerHTML = '';
         
@@ -314,6 +317,7 @@
 
 
     function showGameUI() {
+        // Логика отображения игрового интерфейса
         playersListCard.style.display = 'none';
         document.getElementById('return-to-game-card').style.display = 'none';
         gameFinishCard.style.display = 'none';
@@ -331,6 +335,7 @@
     }
 
     function updateGameUI(game) {
+        // Логика обновления интерфейса в зависимости от статуса игры
         document.getElementById('game-status-display').textContent = game.status;
         const opponentBoardData = isPlayer1 ? game.player2_board : game.player1_board;
         const myBoardData = isPlayer1 ? game.player1_board : game.player2_board;
@@ -348,7 +353,7 @@
                 const opponentReady = opponentBoardData !== null;
                 turnIndicator.textContent = opponentReady 
                     ? '✅ Соперник расставил корабли. Ждём вас!' 
-                    : '🟡 Ждём расстановки от вас и соперника.';
+                    : '🟡 Расставьте корабли и нажмите "ГОТОВ!".';
             } else {
                 placementTools.style.display = 'none';
                 document.getElementById('boards-title').textContent = 'Ожидание соперника...';
@@ -358,18 +363,15 @@
                     : '⏱️ Вы готовы. Ожидаем, пока соперник расставит корабли.';
             }
             
-            // Нужно обновить мою доску, если мы уже расставились
             if (myBoardData !== null) {
                  updateBoardDisplay(myBoardElement, myBoardData, true);
             } else {
-                 // Если еще не расставлены, просто инициализируем пустую доску
                  generateInitialBoardGrid(); 
                  updateBoardDisplay(myBoardElement, boardGrid, true);
             }
 
         } else if (game.status === 'battle') {
             placementMode = false;
-            boardsContainer.style.display = 'block'; // Уже было, но на всякий случай
             placementTools.style.display = 'none';
             opponentBoardWrapper.style.display = 'block';
             document.getElementById('boards-title').textContent = 'Сражение!';
@@ -399,8 +401,8 @@
     // =========================================================================
 
     function initializeBoard(boardElement, isMyBoard) {
+        // Логика инициализации доски
         boardElement.innerHTML = '';
-        
         const letters = [' ', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
         for (let i = 0; i <= BOARD_SIZE; i++) {
             for (let j = 0; j <= BOARD_SIZE; j++) {
@@ -429,28 +431,29 @@
 
 
     function updateBoardDisplay(boardElement, boardData, isMyBoard) {
+        // Логика обновления отображения доски
         if (!boardData) return;
 
         boardElement.querySelectorAll('.ship-overlay').forEach(el => el.remove());
+        boardElement.querySelectorAll('.cell-ship-placed').forEach(el => el.classList.remove('cell-ship-placed'));
+
 
         for (let i = 1; i <= BOARD_SIZE; i++) {
             for (let j = 1; j <= BOARD_SIZE; j++) {
                 const cell = boardElement.querySelector(`[data-row="${i}"][data-col="${j}"]`);
                 if (!cell) continue;
 
-                // Сброс классов, кроме координат
-                if (!cell.classList.contains('coord')) {
-                    cell.className = 'cell'; 
-                }
+                cell.className = 'cell'; 
 
                 const cellState = boardData[i][j];
 
-                // 1. Отображение кораблей (только на своей доске в режиме расстановки/ожидания)
-                if (isMyBoard && placementMode || (isMyBoard && current_game.status !== 'battle')) {
+                // 1. Отображение кораблей 
+                if (isMyBoard) {
                     if (cellState.ship && !cellState.hit) {
-                        const overlay = document.createElement('div');
-                        overlay.className = 'ship-overlay';
-                        cell.appendChild(overlay);
+                        cell.classList.add('cell-ship-placed');
+                    }
+                    if (cellState.ship && cellState.hit) {
+                        cell.classList.add('hit-ship');
                     }
                 }
 
@@ -473,7 +476,7 @@
                     const isFired = cellState.hit || cellState.miss;
                     const isMyTurn = current_game.current_turn === window.myUserId;
                     
-                    if (isFired || !isMyTurn) {
+                    if (isFired || !isMyTurn || current_game.status !== 'battle') {
                         cell.classList.add('disabled');
                     } else {
                         cell.classList.remove('disabled');
@@ -505,13 +508,11 @@
         let opponentBoard = JSON.parse(JSON.stringify(current_game[opponentBoardKey]));
         let myBoard = JSON.parse(JSON.stringify(current_game[myBoardKey]));
 
-        // 1. Сброс маркеров прошлого хода на обеих досках
         resetLastBomb(opponentBoard);
         resetLastBomb(myBoard);
         
-        // 2. Обработка выстрела
         const targetCell = opponentBoard[row][col];
-        targetCell.lastBomb = true; // Устанавливаем маркер на текущий выстрел
+        targetCell.lastBomb = true;
         
         let isHit = false;
         let newStatus = 'battle';
@@ -529,15 +530,14 @@
         } else if (!targetCell.ship && !targetCell.miss) {
             targetCell.miss = true;
         } else {
-            return; // Повторный выстрел
+            return;
         }
         
-        // 3. Определение следующего хода
         const nextTurnId = isHit ? window.myUserId : current_game[opponentIdKey];
         
         const updateObject = {
-            [opponentBoardKey]: opponentBoard, // Обновляем доску противника
-            [myBoardKey]: myBoard, // Обновляем свою доску (только сброс lastBomb)
+            [opponentBoardKey]: opponentBoard,
+            [myBoardKey]: myBoard,
             current_turn: nextTurnId,
             status: newStatus,
             winner_id: winnerId,
@@ -550,7 +550,7 @@
 
         if (error) {
             alert("Ошибка при выполнении выстрела. Проверьте RLS UPDATE.");
-            console.error("Ошибка выстрела:", error);
+            console.error("Ошибка выстрела (RLS UPDATE):", error);
         }
     }
 
@@ -567,6 +567,7 @@
     }
 
     function resetLastBomb(board) {
+        // Логика сброса маркера последнего выстрела
         for (let i = 1; i <= BOARD_SIZE; i++) {
             for (let j = 1; j <= BOARD_SIZE; j++) {
                 if (board[i][j].lastBomb) {
@@ -582,7 +583,10 @@
     // =========================================================================
 
     function renderShipList() {
+        // Логика отображения списка кораблей для перетаскивания
         const list = document.getElementById('ship-list');
+        if (!list) return;
+
         list.innerHTML = '';
         myShips = [];
 
@@ -602,10 +606,10 @@
                 
                 const rotateBtn = document.createElement('button');
                 rotateBtn.textContent = '🔄';
-                rotateBtn.className = 'challenge-button';
-                rotateBtn.style.padding = '5px 10px';
+                rotateBtn.className = 'challenge-button rotate-btn';
                 rotateBtn.onclick = (e) => {
                     e.preventDefault();
+                    e.stopPropagation(); // Остановить, чтобы не сработал dragstart
                     shipDiv.dataset.orientation = shipDiv.dataset.orientation === 'horizontal' ? 'vertical' : 'horizontal';
                     shipDiv.classList.toggle('rotated');
                 };
@@ -628,6 +632,7 @@
     }
 
     function generateInitialBoardGrid() {
+        // Создание пустой доски
         boardGrid = [];
         for (let i = 0; i <= BOARD_SIZE; i++) {
             boardGrid[i] = [];
@@ -640,19 +645,23 @@
 
     function initDragAndDrop() {
         const ships = document.querySelectorAll('.draggable-ship');
+        const cells = myBoardElement.querySelectorAll('.cell:not(.coord)');
         
         ships.forEach(ship => {
             ship.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', ship.dataset.id);
                 ship.classList.add('is-dragging');
+                // Добавляем класс ко всем ячейкам для подсветки
+                myBoardElement.classList.add('drag-active');
             });
 
             ship.addEventListener('dragend', (e) => {
                 ship.classList.remove('is-dragging');
+                myBoardElement.classList.remove('drag-active');
+                clearPlacementPreview();
             });
         });
 
-        const cells = myBoardElement.querySelectorAll('.cell:not(.coord)');
         cells.forEach(cell => {
             cell.addEventListener('dragover', handleDragOver);
             cell.addEventListener('dragleave', handleDragLeave);
@@ -668,33 +677,36 @@
         
         const shipId = e.dataTransfer.getData('text/plain');
         const shipElement = document.querySelector(`.draggable-ship[data-id="${shipId}"]`);
-        if (!shipElement || shipElement.parentElement.classList.contains('ship-placed')) return;
+        if (!shipElement) return;
 
         const size = parseInt(shipElement.dataset.size);
         const orientation = shipElement.dataset.orientation;
         const row = parseInt(e.currentTarget.dataset.row);
         const col = parseInt(e.currentTarget.dataset.col);
 
-        if (checkPlacementValidity(row, col, size, orientation, true)) { // true = проверка на окружение
-            // Удаляем старую расстановку, если она была (для перетаскивания)
+        if (checkPlacementValidity(row, col, size, orientation, true)) { 
             removeShipFromGrid(shipId);
 
-            // Добавляем новый корабль
             addShipToGrid(shipId, row, col, size, orientation);
             
             shipElement.parentElement.classList.add('ship-placed'); 
+            
+            // Визуальное перемещение корабля с левого поля (опционально, но помогает)
+            // Если вы хотите, чтобы корабль исчезал из списка, добавьте:
+            // shipElement.parentElement.style.display = 'none'; 
             
             updateBoardDisplay(myBoardElement, boardGrid, true);
             checkAllShipsPlaced();
 
         } else {
-            alert("Корабль нельзя разместить в этом месте! Проверьте границы и отступы.");
+            alert("Корабль нельзя разместить в этом месте! Проверьте границы и отступы (правило 1 клетки).");
         }
         
         clearPlacementPreview();
+        shipElement.classList.remove('is-dragging');
+        myBoardElement.classList.remove('drag-active');
     }
 
-    // Проверка валидности с учетом отступов в 1 клетку
     function checkPlacementValidity(startRow, startCol, size, orientation, checkBuffer = false) {
         let cellsToCheck = [];
         
@@ -703,8 +715,10 @@
             let r = orientation === 'horizontal' ? startRow : startRow + k;
             let c = orientation === 'horizontal' ? startCol + k : startCol;
 
-            if (r < 1 || r > BOARD_SIZE || c < 1 || c > BOARD_SIZE) return false; // Вне доски
-            if (boardGrid[r][c].ship && !myShips.some(s => s.id === document.querySelector('.draggable-ship.is-dragging')?.dataset.id)) return false; // Наложение
+            if (r < 1 || r > BOARD_SIZE || c < 1 || c > BOARD_SIZE) return false;
+            
+            // Проверка наложения на существующий корабль, который НЕ является перемещаемым
+            if (boardGrid[r][c].ship && !myShips.some(s => s.id === document.querySelector('.draggable-ship.is-dragging')?.dataset.id)) return false; 
             
             cellsToCheck.push({ r, c });
         }
@@ -718,14 +732,12 @@
                         let adjC = c + dc;
                         
                         if (adjR >= 1 && adjR <= BOARD_SIZE && adjC >= 1 && adjC <= BOARD_SIZE) {
-                            // Пропускаем саму клетку
                             if (dr === 0 && dc === 0) continue; 
                             
-                            // Проверяем, что соседняя клетка не занята другим кораблем
                             if (boardGrid[adjR][adjC].ship) {
-                                // Дополнительная проверка: соседняя клетка не должна быть частью текущего перемещаемого корабля
+                                // Если соседняя клетка занята, но не является частью текущего перемещаемого корабля
                                 if (!cellsToCheck.some(cell => cell.r === adjR && cell.c === adjC)) {
-                                    return false; // Нарушен отступ в 1 клетку
+                                    return false; 
                                 }
                             }
                         }
@@ -739,17 +751,21 @@
 
 
     function addShipToGrid(shipId, startRow, startCol, size, orientation) {
-        myShips = myShips.filter(s => s.id !== shipId); // Удаляем старый, если был
+        myShips = myShips.filter(s => s.id !== shipId);
 
         myShips.push({ id: shipId, size: size, row: startRow, col: startCol, orientation: orientation });
         
         if (orientation === 'horizontal') {
             for (let j = startCol; j < startCol + size; j++) {
-                boardGrid[startRow][j].ship = true;
+                if (startRow >= 1 && startRow <= BOARD_SIZE && j >= 1 && j <= BOARD_SIZE) {
+                     boardGrid[startRow][j].ship = true;
+                }
             }
         } else {
             for (let i = startRow; i < startRow + size; i++) {
-                boardGrid[i][startCol].ship = true;
+                if (i >= 1 && i <= BOARD_SIZE && startCol >= 1 && startCol <= BOARD_SIZE) {
+                    boardGrid[i][startCol].ship = true;
+                }
             }
         }
     }
@@ -762,31 +778,32 @@
 
         if (orientation === 'horizontal') {
             for (let j = col; j < col + size; j++) {
-                boardGrid[row][j].ship = false;
+                 if (row >= 1 && row <= BOARD_SIZE && j >= 1 && j <= BOARD_SIZE) {
+                    boardGrid[row][j].ship = false;
+                 }
             }
         } else {
             for (let i = row; i < row + size; i++) {
-                boardGrid[i][col].ship = false;
+                 if (i >= 1 && i <= BOARD_SIZE && col >= 1 && col <= BOARD_SIZE) {
+                    boardGrid[i][col].ship = false;
+                 }
             }
         }
 
         myShips = myShips.filter(s => s.id !== shipId);
     }
     
-    // Новая функция: Рандомная расстановка
     function placeShipsRandomly() {
-        // 1. Очистка
+        // Логика рандомной расстановки
         generateInitialBoardGrid();
         myShips = [];
         
-        // 2. Итерация по всем типам кораблей
         let shipIndex = 0;
         SHIP_CONFIG.forEach(config => {
             for (let i = 0; i < config.count; i++) {
                 let placed = false;
                 const shipId = `${config.size}-${shipIndex++}`;
                 
-                // 3. Попытки размещения
                 let attempts = 0;
                 while (!placed && attempts < 1000) {
                     attempts++;
@@ -803,19 +820,14 @@
 
                 if (!placed) {
                     console.error("Не удалось разместить корабль:", shipId);
-                    alert("Ошибка рандомной расстановки, попробуйте еще раз.");
+                    alert("Ошибка рандомной расстановки. Перезагрузите страницу.");
                     return;
                 }
             }
         });
         
-        // 4. Обновление UI
+        // Обновление UI
         document.querySelectorAll('.draggable-ship-wrapper').forEach(el => el.classList.add('ship-placed'));
-        document.querySelectorAll('.draggable-ship').forEach(el => {
-            el.classList.remove('rotated');
-            el.dataset.orientation = 'horizontal'; // Сброс ориентации в списке
-        });
-        
         updateBoardDisplay(myBoardElement, boardGrid, true);
         checkAllShipsPlaced();
     }
@@ -823,27 +835,24 @@
 
     function checkAllShipsPlaced() {
         const totalShips = SHIP_CONFIG.reduce((sum, cfg) => sum + cfg.count, 0);
-        const placedShipsCount = document.querySelectorAll('.draggable-ship.ship-placed').length;
+        const placedShipsCount = document.querySelectorAll('.draggable-ship-wrapper.ship-placed').length;
         
         if (placedShipsCount === totalShips) {
             startBattleButton.disabled = false;
             turnIndicator.textContent = '✅ Все корабли расставлены! Нажмите "ГОТОВ!".';
         } else {
             startBattleButton.disabled = true;
-            turnIndicator.textContent = '🛥️ Перетащите все корабли на поле.';
+            turnIndicator.textContent = `🛥️ Перетащите все корабли на поле. Осталось: ${totalShips - placedShipsCount}`;
         }
     }
 
     // Функции для превью размещения
-    function handleDragOver(e) {
-        e.preventDefault();
-    }
-
-    function handleDragLeave(e) {
-        clearPlacementPreview();
-    }
+    function handleDragOver(e) { e.preventDefault(); }
+    function handleDragLeave(e) { clearPlacementPreview(); }
 
     function handleMouseEnter(e) {
+        if (!myBoardElement.classList.contains('drag-active')) return;
+        
         const shipId = document.querySelector('.draggable-ship.is-dragging')?.dataset.id;
         if (!shipId) return;
         
@@ -857,28 +866,22 @@
     }
 
     function handleMouseLeave(e) {
-        const shipId = document.querySelector('.draggable-ship.is-dragging')?.dataset.id;
-        if (!shipId) clearPlacementPreview();
+        // Очистку по mouseleave делаем только при dragleave или drop
+        // или когда уходит курсор, если нет активного drag
     }
 
     function showPlacementPreview(startRow, startCol, size, orientation) {
         clearPlacementPreview();
-        // Используем полную проверку (с буфером)
         const isValid = checkPlacementValidity(startRow, startCol, size, orientation, true);
         
-        if (orientation === 'horizontal') {
-            for (let j = 0; j < size; j++) {
-                const cell = myBoardElement.querySelector(`[data-row="${startRow}"][data-col="${startCol + j}"]`);
-                if (cell) {
-                    cell.classList.add(isValid ? 'ship-overlay-valid' : 'ship-overlay-invalid');
-                }
-            }
-        } else {
-            for (let i = 0; i < size; i++) {
-                const cell = myBoardElement.querySelector(`[data-row="${startRow + i}"][data-col="${startCol}"]`);
-                if (cell) {
-                    cell.classList.add(isValid ? 'ship-overlay-valid' : 'ship-overlay-invalid');
-                }
+        const maxK = size;
+        for (let k = 0; k < maxK; k++) {
+            let r = orientation === 'horizontal' ? startRow : startRow + k;
+            let c = orientation === 'horizontal' ? startCol + k : startCol;
+
+            const cell = myBoardElement.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+            if (cell) {
+                cell.classList.add(isValid ? 'ship-overlay-valid' : 'ship-overlay-invalid');
             }
         }
     }
@@ -892,11 +895,13 @@
 
     // Обработка кнопки "ГОТОВ! 🚢"
     startBattleButton.addEventListener('click', async () => {
+        if (startBattleButton.disabled) return;
+        
         startBattleButton.disabled = true;
         
         const boardKey = isPlayer1 ? 'player1_board' : 'player2_board';
         
-        const updateObject = {
+        let updateObject = {
             [boardKey]: boardGrid,
             status: 'placement'
         };
@@ -904,11 +909,14 @@
         const opponentBoardKey = isPlayer1 ? 'player2_board' : 'player1_board';
         const opponentBoardData = current_game[opponentBoardKey];
         
-        if (opponentBoardData !== null) {
+        if (opponentBoardData !== null && current_game.status === 'placement' || current_game.status === 'lobby') {
             // Оба готовы. Player1 всегда начинает.
             updateObject.status = 'battle';
             updateObject.current_turn = current_game.player1_id; 
-            console.log("Оба игрока готовы. Устанавливаем статус 'battle' и current_turn:", updateObject.current_turn);
+            console.log("Оба игрока готовы. Устанавливаем статус 'battle'.");
+        } else if (current_game.status === 'lobby') {
+             // Сохраняем расстановку, но ждём соперника
+             updateObject.status = 'placement';
         }
         
         const { error } = await supabase
@@ -917,8 +925,9 @@
             .eq('id', current_game.id);
 
         if (error) {
-            alert("Ошибка при сохранении расстановки. Проверьте RLS UPDATE.");
-            console.error("Ошибка finishPlacement:", error);
+            // Ошибка RLS UPDATE при сохранении расстановки
+            alert("Ошибка при сохранении расстановки. Проверьте RLS UPDATE."); 
+            console.error("Ошибка finishPlacement (RLS UPDATE):", error);
         } else {
             turnIndicator.textContent = 'Расстановка сохранена. Ожидаем соперника.';
         }
@@ -941,7 +950,7 @@
             finishMessageElement.innerHTML = '👑 **ПОБЕДА!** Вы потопили все корабли противника!';
             finishMessageElement.style.color = '#00a84f';
         } else if (winnerId) {
-            finishMessageElement.innerHTML = '💀 **ПОРАЖЕНИЕ.** Соперник оказался сильнее.';
+            finishMessageElement.innerHTML = `💀 **ПОРАЖЕНИЕ.** Победил: ${isPlayer1 ? game.player2_name : game.player1_name}.`;
             finishMessageElement.style.color = '#d90000';
         } else {
             finishMessageElement.innerHTML = 'Игра завершена (Статус: ' + game.status + ')';
@@ -955,7 +964,7 @@
     }
 
     document.getElementById('end-game-button').addEventListener('click', async () => {
-        if (!current_game || !confirm("Вы уверены, что хотите сдаться? Игра будет завершена.")) return;
+        if (!current_game || !confirm("Вы уверены, что хотите сдаться? Игра будет завершена и засчитана как поражение.")) return;
 
         const winnerId = isPlayer1 ? current_game.player2_id : current_game.player1_id;
 
@@ -969,10 +978,5 @@
             alert("Не удалось завершить игру. Проверьте RLS UPDATE.");
         }
     });
-    
-    // =========================================================================
-    // ЗАПУСК ПОСЛЕ ЗАГРУЗКИ (Для автоматической проверки сессии)
-    // =========================================================================
-    // Код инициализации уже присутствует в конце файла, его не дублируем
     
 })(); // Конец IIFE
