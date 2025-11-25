@@ -365,7 +365,7 @@
         // ИНФОРМАЦИЯ О SUPABASE
         const SUPABASE_URL = 'https://snsvzagvrzdoxaepvivt.supabase.co'; 
         // ВАШ РАБОЧИЙ ANON KEY
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImexрpIjoiMjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlFPNITh7091kyxFFh8LL7ZAY';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuc3Z6YWd2cnpkb3hhZXB2aXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2Mjg0NDIsImV4cCI6MjA3OTIwNDQ0Mn0.q5OATaGULNHzWmT7ccDlPNTTh7091kyxFFh8LL7ZAY';
         
         let supabase = null;
         const authMessage = document.getElementById('auth-message');
@@ -478,44 +478,53 @@
 
                 const email = username.toLowerCase() + '@battleship.local';
                 
-                const { data, error } = await supabase.auth.signUp({ 
+                // ШАГ 1: Регистрируем пользователя в auth.users
+                const { data: authData, error: authError } = await supabase.auth.signUp({ 
                     email, 
                     password,
                     options: { data: { username: username } }
                 });
 
-                if (error) {
-                    console.error('Ошибка регистрации:', error.message);
-                    if (error.message.includes('already registered')) {
+                if (authError) {
+                    console.error('Ошибка регистрации Auth:', authError.message);
+                    if (authError.message.includes('already registered')) {
                         displayAuthMessage('Ошибка: Этот ник уже занят.', false);
                     } else {
-                        displayAuthMessage('Ошибка регистрации. Проверьте настройки Supabase (RLS, CORS).', false);
+                        displayAuthMessage('Ошибка регистрации. Проверьте настройки Supabase.', false);
                     }
                     return;
                 }
-
-                // Ждем сохранения профиля, чтобы избежать гонки данных.
-                // Если регистрация прошла, пользователь должен быть в data.user.
-                const user = data.user || (await supabase.auth.getUser()).data.user; 
                 
-                if (user) {
-                     const { error: profileError } = await supabase.from('profiles').upsert({ id: user.id, username: username });
+                // ШАГ 2: Получаем текущего пользователя (чтобы гарантировать наличие актуального токена)
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-                    if (profileError) {
-                        console.error('Ошибка сохранения профиля:', profileError.message);
-                        displayAuthMessage('Ошибка сохранения профиля. Попробуйте войти.', false);
-                        return;
-                    }
-
-                    currentUserData.id = user.id;
-                    currentUserData.username = username;
-                    resetAuthFields();
-                    setupPresence(user.id, username);
-                    updateUI(user, username);
-                    displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
-                } else {
-                    displayAuthMessage('Ошибка: Пользователь не найден после регистрации.', false);
+                if (userError || !user) {
+                     console.error('Ошибка получения пользователя после регистрации:', userError || 'Пользователь не найден.');
+                     displayAuthMessage('Регистрация прошла, но не удалось войти. Попробуйте Войти.', false);
+                     return;
                 }
+                
+                // ШАГ 3: Создаем запись в таблице profiles (требует RLS на profiles)
+                const { error: profileError } = await supabase
+                    .from('profiles')
+                    .upsert({ 
+                        id: user.id, // Должен совпадать с auth.uid() для RLS
+                        username: username 
+                    });
+
+                if (profileError) {
+                    console.error('Ошибка сохранения профиля:', profileError.message);
+                    displayAuthMessage('Ошибка сохранения профиля. Проверьте RLS на таблице PROFILES.', false);
+                    return;
+                }
+
+                // ШАГ 4: Успех
+                currentUserData.id = user.id;
+                currentUserData.username = username;
+                resetAuthFields();
+                setupPresence(user.id, username);
+                updateUI(user, username);
+                displayAuthMessage(`🎉 Регистрация успешна! Добро пожаловать, ${username}!`, true);
             });
             
             // --- ЛОГИКА ПРИСУТСТВИЯ (МУЛЬТИПЛЕЕРНОЕ ЛОББИ) ---
