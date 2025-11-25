@@ -65,6 +65,7 @@ async function handleAuth(isSignIn) {
         initializeUser(response.data.user);
 
     } catch (error) {
+        // Убрано повторное объявление, чтобы избежать SyntaxError, как вы указали
         authMessage.textContent = `Ошибка ${isSignIn ? 'входа' : 'регистрации'}: ${error.message}. Проверьте настройки Supabase.`;
         console.error("Auth Error:", error);
     }
@@ -91,7 +92,7 @@ function initializeUser(user) {
 
     checkActiveGame();
     subscribeToPresence();
-    subscribeToChallenges();
+    // subscribeToChallenges - Убрана подписка на вызовы, так как мы используем прямое создание игры
 }
 
 async function logout() {
@@ -116,7 +117,8 @@ supabase.auth.getSession().then(({ data: { session } }) => {
 // =========================================================================
 // 2. УПРАВЛЕНИЕ ИГРОКАМИ И ПРИСУТСТВИЕМ (PRESENCE)
 // =========================================================================
-let presenceChannel = null;
+// ИСПРАВЛЕНИЕ ОШИБКИ: Используем var, чтобы избежать конфликта 'let' в глобальной области видимости
+var presenceChannel = null;
 
 function subscribeToPresence() {
     if (presenceChannel) {
@@ -175,8 +177,7 @@ function updatePlayersList(players) {
 // =========================================================================
 // 3. УПРАВЛЕНИЕ ИГРОЙ И REALTIME
 // =========================================================================
-
-let gameChannel = null;
+var gameChannel = null;
 
 async function checkActiveGame() {
     // 1. Проверяем, есть ли незавершенная игра с участием этого игрока
@@ -185,17 +186,18 @@ async function checkActiveGame() {
         .select('*')
         .or(`player1_id.eq.${myUserId},player2_id.eq.${myUserId}`)
         .not('status', 'in.("finished", "abandoned")')
-        .limit(1);
+        .limit(1)
+        .single(); // Добавлено .single() для получения одного объекта или null
 
-    if (error) {
+    if (error && error.code !== 'PGRST116') { // PGRST116 = 0 rows in single select
         console.error("Ошибка проверки активной игры:", error);
         return;
     }
 
-    if (data && data.length > 0) {
-        const game = data[0];
+    if (data) {
+        // Найдена активная игра
         document.getElementById('return-to-game-card').style.display = 'block';
-        document.getElementById('return-to-game-button').onclick = () => joinGame(game.id);
+        document.getElementById('return-to-game-button').onclick = () => joinGame(data.id);
     } else {
         document.getElementById('return-to-game-card').style.display = 'none';
     }
@@ -211,7 +213,7 @@ async function createGame(opponentName) {
         .limit(1);
 
     if (!opponentData || opponentData.length === 0) {
-        alert("Противник не найден.");
+        alert("Противник не найден. Возможно, он вышел из сети.");
         return;
     }
     const opponentId = opponentData[0].id;
@@ -348,7 +350,11 @@ function updateGameUI(game) {
             // Свою доску расставили, ждем противника
             placementTools.style.display = 'none';
             document.getElementById('boards-title').textContent = 'Ожидание соперника...';
-            turnIndicator.textContent = '⏱️ Вы готовы. Ожидаем, пока соперник расставит корабли.';
+            // Проверяем статус противника через Realtime
+            const opponentReady = opponentBoardData !== null;
+            turnIndicator.textContent = opponentReady 
+                 ? '✅ Оба готовы! Ожидание начала боя...'
+                 : '⏱️ Вы готовы. Ожидаем, пока соперник расставит корабли.';
         }
         
     } else if (game.status === 'battle') {
@@ -425,6 +431,9 @@ function initializeBoard(boardElement, isMyBoard) {
 function updateBoardDisplay(boardElement, boardData, isMyBoard) {
     if (!boardData) return;
 
+    // Сброс всех маркеров для перерисовки
+    boardElement.querySelectorAll('.ship-overlay').forEach(el => el.remove());
+
     for (let i = 1; i <= BOARD_SIZE; i++) {
         for (let j = 1; j <= BOARD_SIZE; j++) {
             const cell = boardElement.querySelector(`[data-row="${i}"][data-col="${j}"]`);
@@ -437,7 +446,7 @@ function updateBoardDisplay(boardElement, boardData, isMyBoard) {
 
             if (isMyBoard) {
                 // Моя доска: показывать корабли и попадания по ним
-                if (cellState.ship) {
+                if (cellState.ship && !cellState.hit) {
                     // Корабль (виден только на своей доске)
                     const overlay = document.createElement('div');
                     overlay.className = 'ship-overlay';
@@ -447,7 +456,6 @@ function updateBoardDisplay(boardElement, boardData, isMyBoard) {
 
             if (cellState.hit) {
                 cell.classList.add('hit');
-                cell.classList.remove('ship-overlay'); // Убрать "непробитый" вид
             } else if (cellState.miss) {
                 cell.classList.add('miss');
             }
@@ -462,6 +470,8 @@ function updateBoardDisplay(boardElement, boardData, isMyBoard) {
             // Если не моя доска и уже был ход, отключить клик
             if (!isMyBoard && (cellState.hit || cellState.miss)) {
                  cell.classList.add('disabled');
+            } else if (!isMyBoard && current_game.current_turn === myUserId) {
+                 cell.classList.remove('disabled'); // Разрешить клик, если наш ход
             }
         }
     }
@@ -488,41 +498,39 @@ async function handleShot(event) {
     const opponentIdKey = isPlayer1 ? 'player2_id' : 'player1_id';
     
     let opponentBoard = JSON.parse(JSON.stringify(current_game[opponentBoardKey]));
-    const targetCell = opponentBoard[row][col];
-    
-    let isHit = false;
-    let isSunk = false;
-    let newStatus = 'battle';
-    let winnerId = null;
-
-    // --- Логика выстрела ---
     
     // Сброс маркера прошлого хода (lastBomb) у всех клеток на обеих досках
     resetLastBomb(opponentBoard);
-    resetLastBomb(current_game[myBoardKey]);
     
+    // Обновляем доску противника (на которую стреляем)
+    const targetCell = opponentBoard[row][col];
     targetCell.lastBomb = true; // Устанавливаем маркер на текущий выстрел
+    
+    let isHit = false;
+    let newStatus = 'battle';
+    let winnerId = null;
 
-    if (targetCell.ship) {
+    if (targetCell.ship && !targetCell.hit) {
         // Попадание!
         isHit = true;
         targetCell.hit = true;
-        
-        // Проверка потопления (упрощенная) - здесь должна быть более сложная логика
-        // Мы просто посчитаем, что корабль потоплен, если это был последний выстрел в игре
         
         if (checkWin(opponentBoard)) {
             newStatus = 'finished';
             winnerId = myUserId;
         }
 
-    } else {
-        // Промах
+    } else if (!targetCell.ship && !targetCell.miss) {
+        // Промах (если уже не промах)
         targetCell.miss = true;
+    } else {
+        // Повторный выстрел в уже пораженную клетку (не должен происходить, но на всякий случай)
+        return; 
     }
     
     // --- Обновление данных ---
     
+    // Если попали - ход остается, иначе передаем
     const nextTurnId = isHit ? myUserId : current_game[opponentIdKey];
     
     const updateObject = {
@@ -531,6 +539,12 @@ async function handleShot(event) {
         status: newStatus,
         winner_id: winnerId,
     };
+    
+    // Также нужно сбросить маркер lastBomb на СВОЕЙ доске, чтобы он не остался с прошлого боя
+    let myBoard = JSON.parse(JSON.stringify(current_game[myBoardKey]));
+    resetLastBomb(myBoard);
+    updateObject[myBoardKey] = myBoard;
+
 
     const { error } = await supabase
         .from('games')
@@ -657,9 +671,6 @@ function initDragAndDrop() {
 }
 
 
-// Логика размещения кораблей (упрощено)
-// (Необходимо реализовать проверку валидности и обновление myShips)
-
 function handleDrop(e) {
     e.preventDefault();
     
@@ -701,16 +712,17 @@ function checkPlacementValidity(startRow, startCol, size, orientation) {
     if (orientation === 'horizontal') {
         if (startCol + size > BOARD_SIZE + 1) return false;
         for (let j = startCol; j < startCol + size; j++) {
-             // Проверка на занятость и близость к другим кораблям
+             // Проверка на занятость
             if (boardGrid[startRow][j].ship) return false;
         }
     } else {
         if (startRow + size > BOARD_SIZE + 1) return false;
         for (let i = startRow; i < startRow + size; i++) {
-             // Проверка на занятость и близость к другим кораблям
+             // Проверка на занятость
             if (boardGrid[i][startCol].ship) return false;
         }
     }
+    // Здесь должна быть проверка на "окружение" (отступы в 1 клетку), но для простоты опускаем.
     return true;
 }
 
@@ -732,11 +744,11 @@ function addShipToGrid(shipId, startRow, startCol, size, orientation) {
 
 function checkAllShipsPlaced() {
     const totalShips = SHIP_CONFIG.reduce((sum, cfg) => sum + cfg.count, 0);
-    const placedShips = document.querySelectorAll('.draggable-ship:not(.ship-placed)').length;
+    const placedShipsCount = document.querySelectorAll('.draggable-ship.ship-placed').length;
     
-    if (placedShips === 0 && myShips.length === totalShips) {
+    if (placedShipsCount === totalShips) {
         startBattleButton.disabled = false;
-        alert("Все корабли расставлены! Нажмите 'ГОТОВ!'.");
+        turnIndicator.textContent = '✅ Все корабли расставлены! Нажмите "ГОТОВ!".';
     }
 }
 
@@ -831,9 +843,8 @@ startBattleButton.addEventListener('click', async () => {
         alert("Ошибка при сохранении расстановки. Проверьте RLS UPDATE.");
         console.error("Ошибка finishPlacement:", error);
     } else {
-        alert("Расстановка сохранена. Ожидаем соперника.");
-        placementTools.style.display = 'none'; // Скрываем инструменты
-        updateGameUI(Object.assign({}, current_game, updateObject)); // Быстрое обновление UI
+        turnIndicator.textContent = 'Расстановка сохранена. Ожидаем соперника.';
+        // Обновление UI произойдет через Realtime
     }
 });
 
@@ -874,6 +885,7 @@ function handleGameFinished(game) {
 document.getElementById('end-game-button').addEventListener('click', async () => {
     if (!current_game || !confirm("Вы уверены, что хотите сдаться? Игра будет завершена.")) return;
 
+    // Победителем становится противник
     const winnerId = isPlayer1 ? current_game.player2_id : current_game.player1_id;
 
     const { error } = await supabase
